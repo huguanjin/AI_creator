@@ -37,3 +37,4 @@ coverage
 /service-nest/config.json
 /service-nest/mongo_config.yaml
 /service-nest/initial_admin_credentials.txt
+/service-nest/uploads

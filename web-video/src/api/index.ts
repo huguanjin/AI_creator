@@ -93,10 +93,10 @@ export const authApi = {
 export interface CreateSoraVideoParams {
   model: string
   prompt: string
-  orientation?: 'portrait' | 'landscape'
-  duration?: number
-  watermark?: boolean
-  images?: string[]
+  size?: '720x1280' | '1280x720'
+  seconds?: number
+  character_url?: string
+  character_timestamps?: string
 }
 
 export interface CreateCharacterParams {
@@ -106,9 +106,29 @@ export interface CreateCharacterParams {
 }
 
 export const soraApi = {
-  // 创建视频
-  createVideo: (params: CreateSoraVideoParams) =>
-    api.post('/v1/video/create', params),
+  // 创建视频（支持参考图上传）
+  createVideo: (params: CreateSoraVideoParams, files?: File[]) => {
+    const formData = new FormData()
+    formData.append('model', params.model)
+    formData.append('prompt', params.prompt)
+    if (params.size) formData.append('size', params.size)
+    if (params.seconds) formData.append('seconds', String(params.seconds))
+    if (params.character_url) formData.append('character_url', params.character_url)
+    if (params.character_timestamps) formData.append('character_timestamps', params.character_timestamps)
+
+    // 添加参考图
+    if (files && files.length > 0) {
+      for (const file of files) {
+        formData.append('input_reference', file)
+      }
+    }
+
+    return api.post('/v1/video/create', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
 
   // 查询视频状态
   queryVideo: (id: string) =>
@@ -194,6 +214,45 @@ export const grokApi = {
   // 查询视频状态
   queryVideo: (id: string) =>
     api.get(`/v1/grok/query?id=${encodeURIComponent(id)}`),
+}
+
+// ============ 豆包 API ============
+
+export interface CreateDoubaoVideoParams {
+  model: string
+  prompt: string
+  size?: string
+  seconds?: number
+}
+
+export const doubaoApi = {
+  // 创建视频（支持首帧/尾帧图片上传）
+  createVideo: (params: CreateDoubaoVideoParams, firstFrame?: File, lastFrame?: File) => {
+    const formData = new FormData()
+    formData.append('model', params.model)
+    formData.append('prompt', params.prompt)
+    if (params.size) formData.append('size', params.size)
+    if (params.seconds) formData.append('seconds', String(params.seconds))
+
+    // 首帧图片
+    if (firstFrame) {
+      formData.append('first_frame_image', firstFrame)
+    }
+    // 尾帧图片
+    if (lastFrame) {
+      formData.append('last_frame_image', lastFrame)
+    }
+
+    return api.post('/v1/doubao/create', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+
+  // 查询视频状态
+  queryVideo: (id: string) =>
+    api.get(`/v1/doubao/query?id=${encodeURIComponent(id)}`),
 }
 
 // ============ Gemini Image API ============
@@ -312,6 +371,7 @@ export interface AppConfig {
   geminiImage: ServiceConfig
   grok: ServiceConfig
   grokImage: ServiceConfig
+  doubao: ServiceConfig
   email: EmailConfig
   tutorialUrl: string
 }
@@ -342,6 +402,7 @@ export interface UserApiConfig {
   geminiImage: ServiceConfig
   grok: ServiceConfig
   grokImage: ServiceConfig
+  doubao: ServiceConfig
 }
 
 export const userConfigApi = {
@@ -354,7 +415,7 @@ export const userConfigApi = {
     api.get<{ status: string; data: UserApiConfig }>('/v1/user-config/full'),
 
   // 更新用户单个服务配置
-  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage', config: Partial<ServiceConfig>) =>
+  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao', config: Partial<ServiceConfig>) =>
     api.put<{ status: string; message: string; data: UserApiConfig }>(`/v1/user-config/${service}`, config),
 
   // 同步默认配置到所有服务
@@ -367,7 +428,7 @@ export const userConfigApi = {
 export interface VideoTaskRecord {
   externalTaskId: string
   username: string
-  platform: 'sora' | 'veo' | 'grok'
+  platform: 'sora' | 'veo' | 'grok' | 'doubao'
   model: string
   prompt: string
   params?: Record<string, any>

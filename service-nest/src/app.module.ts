@@ -4,6 +4,7 @@ import { SoraModule } from './sora/sora.module'
 import { VeoModule } from './veo/veo.module'
 import { GeminiImageModule } from './gemini-image/gemini-image.module'
 import { GrokVideoModule } from './grok-video/grok-video.module'
+import { DoubaoModule } from './doubao/doubao.module'
 import { ConfigModule } from './config/config.module'
 import { DatabaseModule } from './database/database.module'
 import { AuthModule } from './auth/auth.module'
@@ -43,6 +44,8 @@ import { EmailModule } from './email/email.module'
     GeminiImageModule,
     // Grok 视频生成模块
     GrokVideoModule,
+    // 豆包视频生成模块
+    DoubaoModule,
     // 管理员模块 - 用户管理、任务统计
     AdminModule,
     // 问题反馈模块

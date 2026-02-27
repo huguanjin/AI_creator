@@ -12,68 +12,83 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common'
-import { FilesInterceptor } from '@nestjs/platform-express'
-import { SoraService } from './sora.service'
-import { CreateVideoDto } from './dto/create-video.dto'
-import { QueryVideoDto } from './dto/query-video.dto'
+import { FileFieldsInterceptor } from '@nestjs/platform-express'
+import { DoubaoService } from './doubao.service'
+import { CreateDoubaoVideoDto } from './dto/create-doubao-video.dto'
+import { QueryDoubaoVideoDto } from './dto/query-doubao-video.dto'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { VideoTasksService } from '../video-tasks/video-tasks.service'
 
-@Controller('v1/video')
+@Controller('v1/doubao')
 @UseGuards(JwtAuthGuard)
-export class SoraController {
-  private readonly logger = new Logger(SoraController.name)
+export class DoubaoController {
+  private readonly logger = new Logger(DoubaoController.name)
 
   constructor(
-    private readonly soraService: SoraService,
+    private readonly doubaoService: DoubaoService,
     private readonly videoTasksService: VideoTasksService,
   ) {}
 
   /**
-   * 创建 Sora 视频
-   * POST /v1/video/create
-   * 支持 multipart/form-data 上传参考图
+   * 创建豆包视频
+   * POST /v1/doubao/create
+   * 支持 multipart/form-data 上传首帧/尾帧图片
    */
   @Post('create')
-  @UseInterceptors(FilesInterceptor('input_reference', 10))
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'first_frame_image', maxCount: 1 },
+    { name: 'last_frame_image', maxCount: 1 },
+  ]))
   async createVideo(
-    @Body() createVideoDto: CreateVideoDto,
-    @UploadedFiles() files?: Express.Multer.File[],
+    @Body() createVideoDto: CreateDoubaoVideoDto,
+    @UploadedFiles() files?: { first_frame_image?: Express.Multer.File[]; last_frame_image?: Express.Multer.File[] },
     @Req() req?: any,
   ) {
     const userId = req?.user?.userId || 'unknown'
-    this.logger.log(`📹 Creating video with model: ${createVideoDto.model}`)
+    this.logger.log(`📹 Creating Doubao video with model: ${createVideoDto.model}`)
     this.logger.log(`📝 Prompt: ${createVideoDto.prompt}`)
-    if (files && files.length > 0) {
-      this.logger.log(`🖼️ Reference images: ${files.length}`)
+
+    const firstFrameFile = files?.first_frame_image?.[0]
+    const lastFrameFile = files?.last_frame_image?.[0]
+
+    if (firstFrameFile) {
+      this.logger.log(`🖼️ First frame image: ${firstFrameFile.originalname}`)
+    }
+    if (lastFrameFile) {
+      this.logger.log(`🖼️ Last frame image: ${lastFrameFile.originalname}`)
     }
 
     try {
-      const result = await this.soraService.createVideo(createVideoDto, files, userId)
-      this.logger.log(`✅ Video task created: ${result.id}`)
+      const result = await this.doubaoService.createVideo(
+        createVideoDto,
+        firstFrameFile,
+        lastFrameFile,
+        userId,
+      )
+      this.logger.log(`✅ Doubao video task created: ${result.id}`)
 
       // 记录任务到数据库
       try {
         await this.videoTasksService.createTask(userId, {
           externalTaskId: result.id,
-          platform: 'sora',
-          model: createVideoDto.model || 'sora',
+          platform: 'doubao',
+          model: createVideoDto.model || 'doubao',
           prompt: createVideoDto.prompt,
           params: {
             size: createVideoDto.size,
             seconds: createVideoDto.seconds,
-            hasReferenceImages: files && files.length > 0,
+            hasFirstFrame: !!firstFrameFile,
+            hasLastFrame: !!lastFrameFile,
           },
           apiResponse: result,
         })
       } catch (dbErr) {
-        this.logger.warn(`⚠️ Failed to save task to DB: ${dbErr.message}`)
+        this.logger.warn(`⚠️ Failed to save Doubao task to DB: ${dbErr.message}`)
       }
 
       return result
-    }
-    catch (error) {
-      this.logger.error(`❌ Failed to create video: ${error.message}`)
+    } catch (error) {
+      this.logger.error(`❌ Failed to create Doubao video: ${error.message}`)
       if (error.response?.data) {
         this.logger.error(`📋 API Response: ${JSON.stringify(error.response.data)}`)
       }
@@ -89,17 +104,17 @@ export class SoraController {
   }
 
   /**
-   * 查询视频任务状态
-   * GET /v1/video/query?id=xxx
+   * 查询豆包视频任务状态
+   * GET /v1/doubao/query?id=xxx
    */
   @Get('query')
-  async queryVideo(@Query() queryDto: QueryVideoDto, @Req() req: any) {
-    this.logger.log(`🔍 Querying video task: ${queryDto.id}`)
+  async queryVideo(@Query() queryDto: QueryDoubaoVideoDto, @Req() req?: any) {
+    this.logger.log(`🔍 Querying Doubao video task: ${queryDto.id}`)
     const userId = req?.user?.userId || 'unknown'
 
     try {
-      const result = await this.soraService.queryVideo(queryDto.id, userId)
-      this.logger.log(`📊 Task status: ${result.status}`)
+      const result = await this.doubaoService.queryVideo(queryDto.id, userId)
+      this.logger.log(`📊 Doubao task status: ${result.status}`)
 
       // 更新数据库中的任务状态
       try {
@@ -113,17 +128,16 @@ export class SoraController {
           updates.progress = result.progress || 50
         } else if (result.status === 'failed' || result.status === 'error') {
           updates.status = 'failed'
-          updates.error = result.error || result.message
+          updates.error = result.error?.message || result.message
         }
         await this.videoTasksService.updateTaskByExternalId(queryDto.id, updates)
       } catch (dbErr) {
-        this.logger.warn(`⚠️ Failed to update task in DB: ${dbErr.message}`)
+        this.logger.warn(`⚠️ Failed to update Doubao task in DB: ${dbErr.message}`)
       }
 
       return result
-    }
-    catch (error) {
-      this.logger.error(`❌ Failed to query video: ${error.message}`)
+    } catch (error) {
+      this.logger.error(`❌ Failed to query Doubao video: ${error.message}`)
       throw new HttpException(
         {
           status: 'error',

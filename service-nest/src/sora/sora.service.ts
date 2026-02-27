@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import axios from 'axios'
+import * as FormData from 'form-data'
 import { CreateVideoDto } from './dto/create-video.dto'
 import { ConfigService } from '../config/config.service'
 import { UserConfigService } from '../user-config/user-config.service'
@@ -33,41 +34,59 @@ export class SoraService {
   }
 
   /**
-   * 创建 HTTP 客户端（使用指定配置）
+   * 创建视频任务（multipart/form-data 格式，上游 POST /v1/videos）
    */
-  private createHttpClientWithConfig(config: { server: string; key: string }) {
-    return axios.create({
-      baseURL: config.server,
-      timeout: 60000,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${config.key}`,
-      },
-    })
-  }
+  async createVideo(dto: CreateVideoDto, files?: Express.Multer.File[], userId?: string): Promise<any> {
+    const config = await this.getUserSoraConfig(userId || 'unknown')
 
-  /**
-   * 创建视频任务
-   */
-  async createVideo(dto: CreateVideoDto, userId: string): Promise<any> {
-    const config = await this.getUserSoraConfig(userId)
-    const payload = {
-      images: dto.images || [],
-      model: dto.model || 'sora-2',
-      orientation: dto.orientation || 'landscape',
-      prompt: dto.prompt,
-      size: dto.size || 'small',
-      duration: dto.duration || 10,
-      watermark: dto.watermark ?? true,
-      private: dto.private ?? false,
+    this.logger.log(`📤 Creating Sora video with model: ${dto.model}`)
+    this.logger.log(`📝 Prompt: ${dto.prompt}`)
+
+    const formData = new FormData()
+
+    // 必填字段
+    formData.append('model', dto.model || 'sora-2')
+    formData.append('prompt', dto.prompt)
+
+    // 可选字段
+    if (dto.size) {
+      formData.append('size', dto.size)
+    }
+    if (dto.seconds) {
+      formData.append('seconds', String(dto.seconds))
+    }
+    if (dto.character_url) {
+      formData.append('character_url', dto.character_url)
+    }
+    if (dto.character_timestamps) {
+      formData.append('character_timestamps', dto.character_timestamps)
     }
 
-    this.logger.log(`📤 Sending create request to: ${config.server}/v1/video/create`)
-    this.logger.log(`📦 Payload: ${JSON.stringify(payload, null, 2)}`)
+    // 参考图（文件上传）
+    if (files && files.length > 0) {
+      this.logger.log(`🖼️ Adding ${files.length} reference images`)
+      for (const file of files) {
+        formData.append('input_reference', file.buffer, {
+          filename: file.originalname,
+          contentType: file.mimetype,
+        })
+      }
+    }
 
-    const httpClient = this.createHttpClientWithConfig(config)
-    const response = await httpClient.post('/v1/video/create', payload)
+    this.logger.log(`📤 Sending create request to: ${config.server}/v1/videos`)
+
+    const response = await axios.post(
+      `${config.server}/v1/videos`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 120000,
+      },
+    )
+
     return response.data
   }
 
@@ -76,17 +95,20 @@ export class SoraService {
    */
   async queryVideo(taskId: string, userId: string): Promise<any> {
     const config = await this.getUserSoraConfig(userId)
-    const url = `/v1/videos/${encodeURIComponent(taskId)}`
-    
+    const url = `${config.server}/v1/videos/${encodeURIComponent(taskId)}`
+
     this.logger.log(`📤 Sending query request for task: ${taskId}`)
-    this.logger.log(`🔗 Full URL: ${config.server}${url}`)
+    this.logger.log(`🔗 Full URL: ${url}`)
 
     try {
-      const httpClient = this.createHttpClientWithConfig(config)
-      const response = await httpClient.get(url)
+      const response = await axios.get(url, {
+        headers: {
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 30000,
+      })
       return response.data
     } catch (error) {
-      // 输出更详细的错误信息
       this.logger.error(`❌ Query failed for task: ${taskId}`)
       this.logger.error(`📋 Status: ${error.response?.status}`)
       this.logger.error(`📋 Response data: ${JSON.stringify(error.response?.data, null, 2)}`)

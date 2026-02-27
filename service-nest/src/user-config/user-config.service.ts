@@ -29,6 +29,10 @@ export interface UserApiConfig {
     server: string
     key: string
   }
+  doubao: {
+    server: string
+    key: string
+  }
 }
 
 export interface UserConfigDocument {
@@ -99,6 +103,10 @@ export class UserConfigService implements OnApplicationBootstrap {
             server: config.grokImage?.server || '',
             key: config.grokImage?.key || '',
           },
+          doubao: {
+            server: config.doubao?.server || '',
+            key: config.doubao?.key || '',
+          },
         }
       }
     } catch (error) {
@@ -112,6 +120,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { server: '', key: '' },
       grok: { server: '', key: '' },
       grokImage: { server: '', key: '' },
+      doubao: { server: '', key: '' },
     }
   }
 
@@ -171,6 +180,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
       grok: { ...defaults.grok, ...stored.grok },
       grokImage: { ...defaults.grokImage, ...stored.grokImage },
+      doubao: { ...defaults.doubao, ...stored.doubao },
     }
   }
 
@@ -201,6 +211,10 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: {
         server: config.grokImage?.server ?? '',
         key: this.maskKey(config.grokImage?.key ?? ''),
+      },
+      doubao: {
+        server: config.doubao?.server ?? '',
+        key: this.maskKey(config.doubao?.key ?? ''),
       },
     }
   }
@@ -233,7 +247,7 @@ export class UserConfigService implements OnApplicationBootstrap {
    */
   async updateUserServiceConfig(
     userId: string,
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao',
     serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
@@ -255,6 +269,9 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'grokImage') {
       if (serviceConfig.server !== undefined) config.grokImage.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.grokImage.key = serviceConfig.key
+    } else if (service === 'doubao') {
+      if (serviceConfig.server !== undefined) config.doubao.server = serviceConfig.server
+      if (serviceConfig.key !== undefined) config.doubao.key = serviceConfig.key
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')
@@ -301,6 +318,11 @@ export class UserConfigService implements OnApplicationBootstrap {
     return config.grokImage
   }
 
+  async getUserDoubaoConfig(userId: string) {
+    const config = await this.getUserConfig(userId)
+    return config.doubao
+  }
+
   /**
    * 将默认 server+key 同步到所有服务配置
    * 用户可选择同步哪些字段（server / key），以及同步到哪些服务
@@ -312,13 +334,13 @@ export class UserConfigService implements OnApplicationBootstrap {
     options?: {
       syncServer?: boolean
       syncKey?: boolean
-      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage'>
+      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao'>
     },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
     const syncServer = options?.syncServer !== false
     const syncKey = options?.syncKey !== false
-    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage']
+    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao']
 
     for (const service of services) {
       if (config[service]) {

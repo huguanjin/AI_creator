@@ -41,6 +41,10 @@ async function bootstrap() {
   console.log('🎥 VEO API:')
   console.log(`   POST http://localhost:${port}/v1/veo/create (支持 multipart/form-data 参考图上传)`)
   console.log(`   GET  http://localhost:${port}/v1/veo/query?id=xxx`)
+  console.log('')
+  console.log('🫘 豆包 API:')
+  console.log(`   POST http://localhost:${port}/v1/doubao/create (支持首帧/尾帧图片上传)`)
+  console.log(`   GET  http://localhost:${port}/v1/doubao/query?id=xxx`)
 }
 
 bootstrap()

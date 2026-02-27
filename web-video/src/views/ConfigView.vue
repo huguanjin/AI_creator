@@ -25,6 +25,7 @@ const syncServices = ref({
   geminiImage: true,
   grok: true,
   grokImage: true,
+  doubao: true,
 })
 
 // 编辑模式
@@ -34,12 +35,14 @@ const editMode = ref<{
   geminiImage: boolean
   grok: boolean
   grokImage: boolean
+  doubao: boolean
 }>({
   sora: false,
   veo: false,
   geminiImage: false,
   grok: false,
   grokImage: false,
+  doubao: false,
 })
 
 // 编辑表单数据
@@ -49,12 +52,14 @@ const editForm = ref<{
   geminiImage: ServiceConfig
   grok: ServiceConfig
   grokImage: ServiceConfig
+  doubao: ServiceConfig
 }>({
   sora: { server: '', key: '', characterServer: '', characterKey: '' },
   veo: { server: '', key: '' },
   geminiImage: { server: '', key: '' },
   grok: { server: '', key: '' },
   grokImage: { server: '', key: '' },
+  doubao: { server: '', key: '' },
 })
 
 // 显示消息
@@ -80,7 +85,7 @@ const loadConfig = async () => {
 }
 
 // 进入编辑模式
-const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage') => {
+const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao') => {
   // 获取完整配置（包含 API Key）
   try {
     const response = await userConfigApi.getFullConfig()
@@ -96,6 +101,8 @@ const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 
       editForm.value.grok = { ...fullConfig.grok }
     } else if (service === 'grokImage') {
       editForm.value.grokImage = { ...fullConfig.grokImage }
+    } else if (service === 'doubao') {
+      editForm.value.doubao = { ...fullConfig.doubao }
     }
     
     editMode.value[service] = true
@@ -105,12 +112,12 @@ const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 
 }
 
 // 取消编辑
-const cancelEdit = (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage') => {
+const cancelEdit = (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao') => {
   editMode.value[service] = false
 }
 
 // 保存配置
-const saveConfig = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage') => {
+const saveConfig = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao') => {
   isSaving.value = true
   try {
     const serviceConfig = editForm.value[service]
@@ -136,12 +143,13 @@ const getServiceName = (service: string): string => {
     geminiImage: 'Gemini Image',
     grok: 'Grok',
     grokImage: 'Grok 生图',
+    doubao: '豆包',
   }
   return names[service] || service
 }
 
 // 测试连接
-const testConnection = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage') => {
+const testConnection = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao') => {
   showMessage(`正在测试 ${getServiceName(service)} 连接...`, 'success')
   // TODO: 实现连接测试
   setTimeout(() => {
@@ -326,6 +334,9 @@ onMounted(() => {
               </label>
               <label class="checkbox-label">
                 <input v-model="syncServices.grokImage" type="checkbox" /> Grok 生图
+              </label>
+              <label class="checkbox-label">
+                <input v-model="syncServices.doubao" type="checkbox" /> 豆包
               </label>
             </div>
           </div>
@@ -559,6 +570,48 @@ onMounted(() => {
               {{ isSaving ? '保存中...' : '💾 保存' }}
             </button>
             <button class="cancel-btn" @click="cancelEdit('grokImage')">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 豆包视频配置 -->
+      <div class="config-section">
+        <div class="section-header">
+          <h2>🫘 豆包视频生成</h2>
+          <button 
+            v-if="!editMode.doubao" 
+            class="edit-btn"
+            @click="enterEditMode('doubao')"
+          >
+            ✏️ 编辑
+          </button>
+        </div>
+        
+        <div v-if="!editMode.doubao" class="config-display">
+          <div class="config-item">
+            <label>API 地址</label>
+            <span class="value">{{ config.doubao?.server || '(未设置)' }}</span>
+          </div>
+          <div class="config-item">
+            <label>API Key</label>
+            <span class="value masked">{{ config.doubao?.key || '(未设置)' }}</span>
+          </div>
+        </div>
+
+        <div v-else class="config-edit">
+          <div class="form-group">
+            <label>API 地址</label>
+            <input v-model="editForm.doubao.server" type="text" placeholder="https://..." />
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input v-model="editForm.doubao.key" type="text" placeholder="sk-..." />
+          </div>
+          <div class="button-group">
+            <button class="save-btn" :disabled="isSaving" @click="saveConfig('doubao')">
+              {{ isSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button class="cancel-btn" @click="cancelEdit('doubao')">取消</button>
           </div>
         </div>
       </div>

@@ -2,8 +2,8 @@ import { IsOptional, IsString, IsIn } from 'class-validator'
 
 export class QueryVideoTaskDto {
   @IsOptional()
-  @IsIn(['sora', 'veo', 'grok'])
-  platform?: 'sora' | 'veo' | 'grok'
+  @IsIn(['sora', 'veo', 'grok', 'doubao'])
+  platform?: 'sora' | 'veo' | 'grok' | 'doubao'
 
   @IsOptional()
   @IsString()

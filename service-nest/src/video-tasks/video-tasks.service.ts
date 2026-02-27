@@ -15,8 +15,8 @@ export interface VideoTaskDocument {
   /** 所属用户 ID（MongoDB _id） */
   userId: string
 
-  /** 平台: sora / veo / grok */
-  platform: 'sora' | 'veo' | 'grok'
+  /** 平台: sora / veo / grok / doubao */
+  platform: 'sora' | 'veo' | 'grok' | 'doubao'
 
   /** 使用的模型 */
   model: string
@@ -151,7 +151,7 @@ export class VideoTasksService implements OnApplicationBootstrap {
   async getUserTasks(
     userId: string,
     options?: {
-      platform?: 'sora' | 'veo' | 'grok'
+      platform?: 'sora' | 'veo' | 'grok' | 'doubao'
       status?: string
       page?: number
       limit?: number

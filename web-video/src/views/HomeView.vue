@@ -1,23 +1,27 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { soraApi, veoApi, grokApi } from '@/api'
+import { soraApi, veoApi, grokApi, doubaoApi } from '@/api'
 import { type VideoTask, useVideoStore } from '@/stores/video'
 
 const store = useVideoStore()
 
-const platform = ref<'sora' | 'veo' | 'grok'>('sora')
+const platform = ref<'sora' | 'veo' | 'grok' | 'doubao'>('sora')
 const isLoading = ref(false)
 
 const soraForm = ref({
   model: 'sora-2',
   prompt: '',
-  orientation: 'landscape' as 'landscape' | 'portrait',
-  duration: 8,
+  size: '1280x720' as '1280x720' | '720x1280',
+  seconds: 10,
 })
 
 // Sora 模型和时长的自定义输入状态
 const soraModelCustom = ref(false)
 const soraDurationCustom = ref(false)
+
+// Sora 参考图
+const soraReferenceFiles = ref<File[]>([])
+const soraFileInput = ref<HTMLInputElement | null>(null)
 
 const veoForm = ref({
   model: 'veo_3_1-fast',
@@ -49,6 +53,24 @@ const grokModelCustom = ref(false)
 const grokReferenceFiles = ref<File[]>([])
 const grokFileInput = ref<HTMLInputElement | null>(null)
 
+// 豆包表单
+const doubaoForm = ref({
+  model: 'doubao-seedance-1-5-pro_720p',
+  prompt: '',
+  size: '16:9',
+  seconds: 5,
+})
+
+// 豆包模型自定义输入状态
+const doubaoModelCustom = ref(false)
+const doubaoDurationCustom = ref(false)
+
+// 豆包首帧/尾帧图片
+const doubaoFirstFrame = ref<File | null>(null)
+const doubaoLastFrame = ref<File | null>(null)
+const doubaoFirstFrameInput = ref<HTMLInputElement | null>(null)
+const doubaoLastFrameInput = ref<HTMLInputElement | null>(null)
+
 const statusText: Record<string, string> = {
   queued: '排队中',
   processing: '生成中',
@@ -64,7 +86,9 @@ const createVideo = async () => {
     ? soraForm.value.prompt
     : platform.value === 'veo'
       ? veoForm.value.prompt
-      : grokForm.value.prompt
+      : platform.value === 'doubao'
+        ? doubaoForm.value.prompt
+        : grokForm.value.prompt
   if (!prompt.trim()) {
     alert('请输入提示词')
     return
@@ -80,9 +104,9 @@ const createVideo = async () => {
       response = await soraApi.createVideo({
         model: soraForm.value.model,
         prompt: soraForm.value.prompt,
-        orientation: soraForm.value.orientation,
-        duration: soraForm.value.duration,
-      })
+        size: soraForm.value.size,
+        seconds: soraForm.value.seconds,
+      }, soraReferenceFiles.value.length > 0 ? soraReferenceFiles.value : undefined)
 
       task = {
         id: response.data.id,
@@ -112,6 +136,25 @@ const createVideo = async () => {
         platform: 'veo',
       }
     }
+    else if (platform.value === 'doubao') {
+      // 豆包
+      response = await doubaoApi.createVideo({
+        model: doubaoForm.value.model,
+        prompt: doubaoForm.value.prompt,
+        size: doubaoForm.value.size,
+        seconds: doubaoForm.value.seconds,
+      }, doubaoFirstFrame.value || undefined, doubaoLastFrame.value || undefined)
+
+      task = {
+        id: response.data.id,
+        model: doubaoForm.value.model,
+        prompt: doubaoForm.value.prompt,
+        status: 'queued',
+        progress: 0,
+        created_at: Date.now(),
+        platform: 'doubao',
+      }
+    }
     else {
       // Grok
       response = await grokApi.createVideo({
@@ -136,11 +179,18 @@ const createVideo = async () => {
     store.addTask(task)
 
     // 清空表单
-    if (platform.value === 'sora')
+    if (platform.value === 'sora') {
       soraForm.value.prompt = ''
+      soraReferenceFiles.value = []
+    }
     else if (platform.value === 'veo') {
       veoForm.value.prompt = ''
       veoReferenceFiles.value = []
+    }
+    else if (platform.value === 'doubao') {
+      doubaoForm.value.prompt = ''
+      doubaoFirstFrame.value = null
+      doubaoLastFrame.value = null
     }
     else {
       grokForm.value.prompt = ''
@@ -157,6 +207,16 @@ const createVideo = async () => {
   finally {
     isLoading.value = false
   }
+}
+
+// Sora 参考图处理函数
+const handleSoraFileSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files) {
+    const newFiles = Array.from(input.files)
+    soraReferenceFiles.value = [...soraReferenceFiles.value, ...newFiles]
+  }
+  input.value = ''
 }
 
 // VEO 参考图处理函数
@@ -192,8 +252,26 @@ const removeGrokFile = (index: number) => {
   grokReferenceFiles.value.splice(index, 1)
 }
 
+// 豆包首帧图处理
+const handleDoubaoFirstFrame = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    doubaoFirstFrame.value = input.files[0]
+  }
+  input.value = ''
+}
+
+// 豆包尾帧图处理
+const handleDoubaoLastFrame = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    doubaoLastFrame.value = input.files[0]
+  }
+  input.value = ''
+}
+
 // 轮询任务状态
-const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok') => {
+const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao') => {
   const maxAttempts = 120
   let attempts = 0
 
@@ -207,7 +285,9 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
         ? await soraApi.queryVideo(taskId)
         : taskPlatform === 'veo'
           ? await veoApi.queryVideo(taskId)
-          : await grokApi.queryVideo(taskId)
+          : taskPlatform === 'doubao'
+            ? await doubaoApi.queryVideo(taskId)
+            : await grokApi.queryVideo(taskId)
 
       const data = response.data
 
@@ -278,13 +358,20 @@ onMounted(async () => {
       >
         ⚡ Grok (xAI)
       </button>
+      <button
+        class="tab"
+        :class="{ active: platform === 'doubao' }"
+        @click="platform = 'doubao'"
+      >
+        🫘 豆包 (Doubao)
+      </button>
     </div>
 
     <div class="grid grid-2">
       <!-- 左侧：输入表单 -->
       <div class="card">
         <h2 class="card-title">
-          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : '⚡ Grok 视频生成' }}
+          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : '🫘 豆包视频生成' }}
         </h2>
 
         <!-- Sora 表单 -->
@@ -332,13 +419,13 @@ onMounted(async () => {
           </div>
 
           <div class="form-group">
-            <label class="form-label">方向</label>
-            <select v-model="soraForm.orientation" class="form-select">
-              <option value="landscape">
-                横屏 (16:9)
+            <label class="form-label">尺寸</label>
+            <select v-model="soraForm.size" class="form-select">
+              <option value="1280x720">
+                横屏 (1280x720)
               </option>
-              <option value="portrait">
-                竖屏 (9:16)
+              <option value="720x1280">
+                竖屏 (720x1280)
               </option>
             </select>
           </div>
@@ -348,22 +435,19 @@ onMounted(async () => {
             <div class="input-with-toggle">
               <select
                 v-if="!soraDurationCustom"
-                v-model.number="soraForm.duration"
+                v-model.number="soraForm.seconds"
                 class="form-select"
               >
-                <option :value="4">
-                  4 秒
+                <option :value="10">
+                  10 秒
                 </option>
-                <option :value="8">
-                  8 秒
-                </option>
-                <option :value="12">
-                  12 秒
+                <option :value="15">
+                  15 秒
                 </option>
               </select>
               <input
                 v-else
-                v-model.number="soraForm.duration"
+                v-model.number="soraForm.seconds"
                 type="number"
                 class="form-input"
                 min="1"
@@ -378,6 +462,33 @@ onMounted(async () => {
               >
                 {{ soraDurationCustom ? '📋' : '✏️' }}
               </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">参考图 (可选)</label>
+            <div class="file-upload-area">
+              <input
+                ref="soraFileInput"
+                type="file"
+                accept="image/*"
+                multiple
+                style="display: none"
+                @change="(e: Event) => {
+                  const target = e.target as HTMLInputElement
+                  if (target.files) {
+                    soraReferenceFiles = [...soraReferenceFiles, ...Array.from(target.files)]
+                    target.value = ''
+                  }
+                }"
+              >
+              <button type="button" class="btn btn-outline" @click="soraFileInput?.click()">
+                📁 选择图片
+              </button>
+              <span v-if="soraReferenceFiles.length > 0" class="file-count">
+                已选 {{ soraReferenceFiles.length }} 张
+                <button type="button" class="btn-clear" @click="soraReferenceFiles = []">清除</button>
+              </span>
             </div>
           </div>
         </template>
@@ -502,7 +613,7 @@ onMounted(async () => {
         </template>
 
         <!-- Grok 表单 -->
-        <template v-else>
+        <template v-else-if="platform === 'grok'">
           <div class="form-group">
             <label class="form-label">模型</label>
             <div class="input-with-toggle">
@@ -607,6 +718,149 @@ onMounted(async () => {
                   ✕
                 </button>
               </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 豆包 表单 -->
+        <template v-else>
+          <div class="form-group">
+            <label class="form-label">模型</label>
+            <div class="input-with-toggle">
+              <select
+                v-if="!doubaoModelCustom"
+                v-model="doubaoForm.model"
+                class="form-select"
+              >
+                <optgroup label="🎬 标准版">
+                  <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
+                  <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
+                  <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
+                </optgroup>
+              </select>
+              <input
+                v-else
+                v-model="doubaoForm.model"
+                type="text"
+                class="form-input"
+                placeholder="输入自定义模型名称"
+              >
+              <button
+                type="button"
+                class="toggle-btn"
+                :title="doubaoModelCustom ? '切换为下拉选择' : '切换为自定义输入'"
+                @click="doubaoModelCustom = !doubaoModelCustom"
+              >
+                {{ doubaoModelCustom ? '📋' : '✏️' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">提示词</label>
+            <textarea
+              v-model="doubaoForm.prompt"
+              class="form-textarea"
+              placeholder="描述你想要生成的视频内容..."
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">画面比例</label>
+            <select v-model="doubaoForm.size" class="form-select">
+              <option value="16:9">横屏 (16:9)</option>
+              <option value="4:3">横屏 (4:3)</option>
+              <option value="1:1">正方 (1:1)</option>
+              <option value="3:4">竖屏 (3:4)</option>
+              <option value="9:16">竖屏 (9:16)</option>
+              <option value="21:9">超宽 (21:9)</option>
+              <option value="keep_ratio">保持原始比例</option>
+              <option value="adaptive">自适应</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">时长 (秒)</label>
+            <div class="input-with-toggle">
+              <select
+                v-if="!doubaoDurationCustom"
+                v-model.number="doubaoForm.seconds"
+                class="form-select"
+              >
+                <option :value="4">4 秒</option>
+                <option :value="5">5 秒</option>
+                <option :value="6">6 秒</option>
+                <option :value="8">8 秒</option>
+                <option :value="10">10 秒</option>
+                <option :value="12">12 秒</option>
+              </select>
+              <input
+                v-else
+                v-model.number="doubaoForm.seconds"
+                type="number"
+                class="form-input"
+                min="4"
+                max="12"
+                placeholder="输入秒数 (4-12)"
+              >
+              <button
+                type="button"
+                class="toggle-btn"
+                :title="doubaoDurationCustom ? '切换为下拉选择' : '切换为自定义输入'"
+                @click="doubaoDurationCustom = !doubaoDurationCustom"
+              >
+                {{ doubaoDurationCustom ? '📋' : '✏️' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 首帧图上传 -->
+          <div class="form-group">
+            <label class="form-label">首帧图 (可选)</label>
+            <div class="reference-upload">
+              <input
+                ref="doubaoFirstFrameInput"
+                type="file"
+                accept="image/*"
+                style="display: none"
+                @change="handleDoubaoFirstFrame"
+              >
+              <button
+                type="button"
+                class="btn btn-secondary upload-btn"
+                @click="doubaoFirstFrameInput?.click()"
+              >
+                📷 选择首帧图
+              </button>
+              <span v-if="doubaoFirstFrame" class="file-count">
+                {{ doubaoFirstFrame.name }}
+                <button type="button" class="btn-clear" @click="doubaoFirstFrame = null">清除</button>
+              </span>
+            </div>
+          </div>
+
+          <!-- 尾帧图上传 -->
+          <div class="form-group">
+            <label class="form-label">尾帧图 (可选)</label>
+            <div class="reference-upload">
+              <input
+                ref="doubaoLastFrameInput"
+                type="file"
+                accept="image/*"
+                style="display: none"
+                @change="handleDoubaoLastFrame"
+              >
+              <button
+                type="button"
+                class="btn btn-secondary upload-btn"
+                @click="doubaoLastFrameInput?.click()"
+              >
+                📷 选择尾帧图
+              </button>
+              <span v-if="doubaoLastFrame" class="file-count">
+                {{ doubaoLastFrame.name }}
+                <button type="button" class="btn-clear" @click="doubaoLastFrame = null">清除</button>
+              </span>
             </div>
           </div>
         </template>

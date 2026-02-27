@@ -27,6 +27,10 @@ export interface AppConfig {
     server: string
     key: string
   }
+  doubao: {
+    server: string
+    key: string
+  }
   email: {
     smtpServer: string
     smtpPort: number
@@ -70,6 +74,7 @@ export class ConfigService implements OnApplicationBootstrap {
           geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
           grok: { ...defaults.grok, ...stored.grok },
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
+          doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
         }
@@ -134,6 +139,10 @@ export class ConfigService implements OnApplicationBootstrap {
         server: process.env.GROK_IMAGE_SERVER || '',
         key: process.env.GROK_IMAGE_KEY || '',
       },
+      doubao: {
+        server: process.env.DOUBAO_SERVER || '',
+        key: process.env.DOUBAO_KEY || '',
+      },
       email: {
         smtpServer: process.env.SMTP_SERVER || 'smtp.163.com',
         smtpPort: parseInt(process.env.SMTP_PORT || '465', 10),
@@ -170,6 +179,7 @@ export class ConfigService implements OnApplicationBootstrap {
           geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
           grok: { ...defaults.grok, ...stored.grok },
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
+          doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
         }
@@ -208,6 +218,10 @@ export class ConfigService implements OnApplicationBootstrap {
       grokImage: {
         server: config.grokImage?.server ?? '',
         key: this.maskKey(config.grokImage?.key ?? ''),
+      },
+      doubao: {
+        server: config.doubao?.server ?? '',
+        key: this.maskKey(config.doubao?.key ?? ''),
       },
       email: {
         smtpServer: config.email?.smtpServer ?? '',
@@ -249,7 +263,7 @@ export class ConfigService implements OnApplicationBootstrap {
    * 更新单个服务配置
    */
   async updateServiceConfig(
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'email' | 'tutorial',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'email' | 'tutorial',
     config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string },
   ): Promise<AppConfig> {
     const currentConfig = this.getConfig()
@@ -260,6 +274,7 @@ export class ConfigService implements OnApplicationBootstrap {
     if (!currentConfig.geminiImage) currentConfig.geminiImage = { server: '', key: '' }
     if (!currentConfig.grok) currentConfig.grok = { server: '', key: '' }
     if (!currentConfig.grokImage) currentConfig.grokImage = { server: '', key: '' }
+    if (!currentConfig.doubao) currentConfig.doubao = { server: '', key: '' }
     if (!currentConfig.email) currentConfig.email = { smtpServer: 'smtp.163.com', smtpPort: 465, smtpSSL: true, smtpAccount: '', smtpToken: '', smtpFrom: '' }
 
     if (service === 'sora') {
@@ -279,6 +294,9 @@ export class ConfigService implements OnApplicationBootstrap {
     } else if (service === 'grokImage') {
       if (config.server !== undefined) currentConfig.grokImage.server = config.server
       if (config.key !== undefined) currentConfig.grokImage.key = config.key
+    } else if (service === 'doubao') {
+      if (config.server !== undefined) currentConfig.doubao.server = config.server
+      if (config.key !== undefined) currentConfig.doubao.key = config.key
     } else if (service === 'email') {
       if (config.smtpServer !== undefined) currentConfig.email.smtpServer = config.smtpServer
       if (config.smtpPort !== undefined) currentConfig.email.smtpPort = config.smtpPort
@@ -355,6 +373,10 @@ export class ConfigService implements OnApplicationBootstrap {
 
   getGrokImageConfig() {
     return this.getConfig().grokImage || { server: '', key: '' }
+  }
+
+  getDoubaoConfig() {
+    return this.getConfig().doubao || { server: '', key: '' }
   }
 
   getEmailConfig() {

@@ -7,7 +7,7 @@ import { IsArray, IsIn, IsNumber, IsOptional, IsString } from 'class-validator'
 export class CreateImageDto {
   /**
    * 模型名称
-   * Gemini: gemini-3-pro-image-preview, gemini-2.0-flash-exp-image-generation
+   * Gemini: gemini-3-pro-image-preview, gemini-3.1-flash-image-preview, gemini-2.0-flash-exp-image-generation
    * Grok: grok-4-1-image
    * GPT: gpt-image-1.5
    */
@@ -23,7 +23,8 @@ export class CreateImageDto {
 
   /**
    * 宽高比（Gemini 模型使用）
-   * 支持: 1:1, 16:9, 9:16, 4:3, 3:4
+   * 通用: 1:1, 16:9, 9:16, 4:3, 3:4
+   * gemini-3.1-flash-image-preview 额外支持: 1:4, 4:1, 1:8, 8:1
    */
   @IsOptional()
   @IsString()
@@ -31,7 +32,8 @@ export class CreateImageDto {
 
   /**
    * 图片尺寸/清晰度（Gemini 模型使用）
-   * 支持: 1K, 2K, 4K
+   * 通用: 1K, 2K, 4K
+   * gemini-3.1-flash-image-preview 额外支持: 0.5K (512px)
    */
   @IsOptional()
   @IsString()
@@ -56,6 +58,7 @@ export class CreateImageDto {
   /**
    * 参考图片（Base64 编码）
    * 用于图片编辑/修改
+   * gemini-3.1-flash-image-preview 最多 14 张，其他模型最多 5 张
    */
   @IsOptional()
   @IsArray()

@@ -19,6 +19,49 @@ const isGrokModel = computed(() => {
   return (m.startsWith('grok-') && m.includes('image')) || m.startsWith('gpt-image')
 })
 
+// 判断当前模型是否为 Gemini 3.1 Flash Image
+const isGemini31Flash = computed(() => {
+  return imageForm.value.model === 'gemini-3.1-flash-image-preview'
+})
+
+// 根据模型动态计算可选宽高比
+const availableAspectRatios = computed(() => {
+  const base = [
+    { value: '1:1', label: '1:1 (正方形)' },
+    { value: '16:9', label: '16:9 (横屏)' },
+    { value: '9:16', label: '9:16 (竖屏)' },
+    { value: '4:3', label: '4:3' },
+    { value: '3:4', label: '3:4' },
+  ]
+  if (isGemini31Flash.value) {
+    base.push(
+      { value: '1:4', label: '1:4 (超窄竖屏)' },
+      { value: '4:1', label: '4:1 (超宽横屏)' },
+      { value: '1:8', label: '1:8 (极窄竖屏)' },
+      { value: '8:1', label: '8:1 (极宽横屏)' },
+    )
+  }
+  return base
+})
+
+// 根据模型动态计算可选图片尺寸
+const availableImageSizes = computed(() => {
+  const base = [
+    { value: '1K', label: '1K (标准)' },
+    { value: '2K', label: '2K (高清)' },
+    { value: '4K', label: '4K (超清)' },
+  ]
+  if (isGemini31Flash.value) {
+    base.unshift({ value: '0.5K', label: '0.5K (512px)' })
+  }
+  return base
+})
+
+// 最大参考图片数量
+const maxReferenceImages = computed(() => {
+  return isGemini31Flash.value ? 14 : 5
+})
+
 // 自定义模型输入
 const modelCustom = ref(false)
 
@@ -68,7 +111,13 @@ const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement
   if (input.files) {
     const newFiles = Array.from(input.files)
-    referenceFiles.value = [...referenceFiles.value, ...newFiles]
+    const combined = [...referenceFiles.value, ...newFiles]
+    if (combined.length > maxReferenceImages.value) {
+      alert(`当前模型最多支持 ${maxReferenceImages.value} 张参考图片`)
+      referenceFiles.value = combined.slice(0, maxReferenceImages.value)
+    } else {
+      referenceFiles.value = combined
+    }
   }
   input.value = ''
 }
@@ -367,6 +416,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
             <select v-if="!modelCustom" v-model="imageForm.model">
               <optgroup label="Gemini">
                 <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
                 <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp</option>
               </optgroup>
               <optgroup label="Grok">
@@ -402,20 +452,14 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
           <div class="form-group">
             <label>宽高比</label>
             <select v-model="imageForm.aspectRatio">
-              <option value="1:1">1:1 (正方形)</option>
-              <option value="16:9">16:9 (横屏)</option>
-              <option value="9:16">9:16 (竖屏)</option>
-              <option value="4:3">4:3</option>
-              <option value="3:4">3:4</option>
+              <option v-for="ar in availableAspectRatios" :key="ar.value" :value="ar.value">{{ ar.label }}</option>
             </select>
           </div>
 
           <div class="form-group">
             <label>图片尺寸</label>
             <select v-model="imageForm.imageSize">
-              <option value="1K">1K (标准)</option>
-              <option value="2K">2K (高清)</option>
-              <option value="4K">4K (超清)</option>
+              <option v-for="sz in availableImageSizes" :key="sz.value" :value="sz.value">{{ sz.label }}</option>
             </select>
           </div>
         </div>
@@ -444,7 +488,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 
         <!-- 参考图片上传 -->
         <div class="form-group">
-          <label>参考图片 (可选，用于图片编辑)</label>
+          <label>参考图片 (可选，最多{{ maxReferenceImages }}张)</label>
           <div class="file-upload">
             <input
               ref="fileInput"
@@ -454,8 +498,8 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
               @change="handleFileSelect"
               style="display: none"
             />
-            <button class="upload-btn" @click="fileInput?.click()">
-              📎 添加参考图
+            <button class="upload-btn" @click="fileInput?.click()" :disabled="referenceFiles.length >= maxReferenceImages">
+              📎 添加参考图 ({{ referenceFiles.length }}/{{ maxReferenceImages }})
             </button>
             <span class="file-hint">支持 JPG、PNG 格式</span>
           </div>

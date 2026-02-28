@@ -62,7 +62,7 @@ export class GeminiImageController {
    * POST /v1/image/create-with-ref
    */
   @Post('create-with-ref')
-  @UseInterceptors(FilesInterceptor('reference_images', 5))
+  @UseInterceptors(FilesInterceptor('reference_images', 14))
   async createImageWithRef(
     @Body() createImageDto: CreateImageDto,
     @Req() req: Request,
@@ -137,7 +137,7 @@ export class GeminiImageController {
    * POST /v1/image/generate-with-ref
    */
   @Post('generate-with-ref')
-  @UseInterceptors(FilesInterceptor('reference_images', 5))
+  @UseInterceptors(FilesInterceptor('reference_images', 14))
   async generateImageWithRef(
     @Body() createImageDto: CreateImageDto,
     @Req() req: Request,

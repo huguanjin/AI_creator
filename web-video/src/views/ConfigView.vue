@@ -157,6 +157,16 @@ const testConnection = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' |
   }, 1000)
 }
 
+// 全选/取消全选同步服务
+const toggleAllSyncServices = (value: boolean) => {
+  syncServices.value.sora = value
+  syncServices.value.veo = value
+  syncServices.value.geminiImage = value
+  syncServices.value.grok = value
+  syncServices.value.grokImage = value
+  syncServices.value.doubao = value
+}
+
 // 同步默认配置到所有服务
 const syncDefault = async () => {
   if (!defaultForm.value.server && !defaultForm.value.key) {
@@ -318,7 +328,13 @@ onMounted(() => {
             <input v-model="defaultForm.key" type="text" placeholder="sk-..." />
           </div>
           <div class="form-group">
-            <label>同步到以下服务</label>
+            <div class="sync-label-row">
+              <label>同步到以下服务</label>
+              <div class="sync-toggle-buttons">
+                <button class="toggle-btn" @click="toggleAllSyncServices(true)">全选</button>
+                <button class="toggle-btn" @click="toggleAllSyncServices(false)">取消全选</button>
+              </div>
+            </div>
             <div class="sync-checkboxes">
               <label class="checkbox-label">
                 <input v-model="syncServices.sora" type="checkbox" /> Sora
@@ -977,6 +993,38 @@ h1 {
   font-size: 14px;
   line-height: 1.6;
   margin: 0 0 16px;
+}
+
+.sync-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.sync-label-row label {
+  margin-bottom: 0;
+}
+
+.sync-toggle-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-btn {
+  padding: 2px 12px;
+  font-size: 12px;
+  border: 1px solid #667eea;
+  border-radius: 4px;
+  background: transparent;
+  color: #667eea;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+  background: #667eea;
+  color: #fff;
 }
 
 .sync-checkboxes {

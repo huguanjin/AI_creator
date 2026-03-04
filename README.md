@@ -352,3 +352,9 @@ MIT
         <div>支付宝捐助</div>
     </div>
 </div>
+
+## 项目交流群
+
+<div style="width:200px">
+    <img src="https://github.com/user-attachments/assets/94ebe40e-fde0-48c6-9ea6-afde7a677456" style="width:200px">
+</div>

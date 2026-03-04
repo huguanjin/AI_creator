@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { geminiImageApi, type GeminiImageResult } from '@/api'
+import { computed, onMounted, ref } from 'vue'
+import { geminiImageApi, userConfigApi, type GeminiImageResult } from '@/api'
 
 const isLoading = ref(false)
 const imageForm = ref({
@@ -60,6 +60,54 @@ const availableImageSizes = computed(() => {
 // 最大参考图片数量
 const maxReferenceImages = computed(() => {
   return isGemini31Flash.value ? 14 : 5
+})
+
+// API 快捷配置
+const apiConfigVisible = ref(false)
+const apiConfigSaving = ref(false)
+const apiConfigMsg = ref('')
+const apiConfig = ref<Record<string, { server: string; key: string }>>({
+  geminiImage: { server: '', key: '' },
+  grokImage: { server: '', key: '' },
+})
+
+// 根据当前模型决定配置服务名
+const currentImageService = computed(() => {
+  return isGrokModel.value ? 'grokImage' : 'geminiImage'
+})
+
+const loadApiConfig = async () => {
+  try {
+    const response = await userConfigApi.getFullConfig()
+    const data = response.data.data
+    if (data.geminiImage) {
+      apiConfig.value.geminiImage = { server: data.geminiImage.server || '', key: data.geminiImage.key || '' }
+    }
+    if (data.grokImage) {
+      apiConfig.value.grokImage = { server: data.grokImage.server || '', key: data.grokImage.key || '' }
+    }
+  } catch (e) {
+    console.error('加载 API 配置失败', e)
+  }
+}
+
+const saveApiConfig = async () => {
+  const svc = currentImageService.value as 'geminiImage' | 'grokImage'
+  apiConfigSaving.value = true
+  try {
+    await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
+    apiConfigMsg.value = '✅ 保存成功'
+    setTimeout(() => { apiConfigMsg.value = '' }, 2000)
+  } catch (e: any) {
+    apiConfigMsg.value = '❌ 保存失败'
+    setTimeout(() => { apiConfigMsg.value = '' }, 3000)
+  } finally {
+    apiConfigSaving.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadApiConfig()
 })
 
 // 自定义模型输入
@@ -410,6 +458,45 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
     <div class="main-content">
       <!-- 左侧：表单 -->
       <div class="form-panel">
+        <!-- API 快捷配置 -->
+        <div class="api-config-section">
+          <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
+            ⚙️ API 配置 ({{ isGrokModel ? 'Grok 图片' : 'Gemini 图片' }})
+            <span class="toggle-arrow">{{ apiConfigVisible ? '▲' : '▼' }}</span>
+          </button>
+          <div v-if="apiConfigVisible" class="api-config-form">
+            <div class="api-config-row">
+              <label class="api-config-label">API 地址</label>
+              <input
+                v-model="apiConfig[currentImageService].server"
+                type="text"
+                class="api-config-input"
+                placeholder="https://api.example.com"
+              >
+            </div>
+            <div class="api-config-row">
+              <label class="api-config-label">API 密钥</label>
+              <input
+                v-model="apiConfig[currentImageService].key"
+                type="password"
+                class="api-config-input"
+                placeholder="sk-..."
+              >
+            </div>
+            <div class="api-config-actions">
+              <button
+                type="button"
+                class="api-config-save-btn"
+                :disabled="apiConfigSaving"
+                @click="saveApiConfig"
+              >
+                {{ apiConfigSaving ? '保存中...' : '💾 保存配置' }}
+              </button>
+              <span v-if="apiConfigMsg" class="api-config-msg">{{ apiConfigMsg }}</span>
+            </div>
+          </div>
+        </div>
+
         <div class="form-group">
           <label>模型</label>
           <div class="model-select">
@@ -1022,5 +1109,102 @@ h1 {
   .form-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* API 快捷配置 */
+.api-config-section {
+  margin-bottom: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.api-config-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  border: none;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.api-config-toggle:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.toggle-arrow {
+  font-size: 10px;
+}
+
+.api-config-form {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.api-config-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-config-label {
+  font-size: 13px;
+  color: #666;
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.api-config-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.api-config-input:focus {
+  border-color: #667eea;
+}
+
+.api-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-config-save-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  border: none;
+  border-radius: 6px;
+  background: #667eea;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-config-save-btn:hover {
+  background: #5a6fd6;
+}
+
+.api-config-save-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.api-config-msg {
+  font-size: 12px;
+  color: #888;
 }
 </style>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { soraApi, veoApi, grokApi, doubaoApi } from '@/api'
+import { soraApi, veoApi, grokApi, doubaoApi, userConfigApi } from '@/api'
 import { type VideoTask, useVideoStore } from '@/stores/video'
 
 const store = useVideoStore()
@@ -70,6 +70,51 @@ const doubaoFirstFrame = ref<File | null>(null)
 const doubaoLastFrame = ref<File | null>(null)
 const doubaoFirstFrameInput = ref<HTMLInputElement | null>(null)
 const doubaoLastFrameInput = ref<HTMLInputElement | null>(null)
+
+// API 快捷配置
+const apiConfigVisible = ref(false)
+const apiConfigSaving = ref(false)
+const apiConfigMsg = ref('')
+const apiConfig = ref<Record<string, { server: string; key: string; characterServer?: string; characterKey?: string }>>({
+  sora: { server: '', key: '', characterServer: '', characterKey: '' },
+  veo: { server: '', key: '' },
+  grok: { server: '', key: '' },
+  doubao: { server: '', key: '' },
+})
+
+const loadApiConfig = async () => {
+  try {
+    const response = await userConfigApi.getFullConfig()
+    const data = response.data.data
+    for (const svc of ['sora', 'veo', 'grok', 'doubao'] as const) {
+      if (data[svc]) {
+        apiConfig.value[svc] = { server: data[svc].server || '', key: data[svc].key || '' }
+      }
+    }
+    // Sora 角色 API 配置
+    if (data.sora) {
+      apiConfig.value.sora.characterServer = data.sora.characterServer || ''
+      apiConfig.value.sora.characterKey = data.sora.characterKey || ''
+    }
+  } catch (e) {
+    console.error('加载 API 配置失败', e)
+  }
+}
+
+const saveApiConfig = async () => {
+  const svc = platform.value
+  apiConfigSaving.value = true
+  try {
+    await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
+    apiConfigMsg.value = '✅ 保存成功'
+    setTimeout(() => { apiConfigMsg.value = '' }, 2000)
+  } catch (e: any) {
+    apiConfigMsg.value = '❌ 保存失败'
+    setTimeout(() => { apiConfigMsg.value = '' }, 3000)
+  } finally {
+    apiConfigSaving.value = false
+  }
+}
 
 const statusText: Record<string, string> = {
   queued: '排队中',
@@ -322,6 +367,9 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
 
 // 恢复未完成任务的轮询
 onMounted(async () => {
+  // 加载用户 API 配置
+  await loadApiConfig()
+
   // 先从数据库加载任务列表
   await store.loadTasks()
 
@@ -373,6 +421,67 @@ onMounted(async () => {
         <h2 class="card-title">
           {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : '🫘 豆包视频生成' }}
         </h2>
+
+        <!-- API 快捷配置 -->
+        <div class="api-config-section">
+          <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
+            ⚙️ API 配置
+            <span class="toggle-arrow">{{ apiConfigVisible ? '▲' : '▼' }}</span>
+          </button>
+          <div v-if="apiConfigVisible" class="api-config-form">
+            <div class="api-config-row">
+              <label class="api-config-label">API 地址</label>
+              <input
+                v-model="apiConfig[platform].server"
+                type="text"
+                class="form-input"
+                placeholder="https://api.example.com"
+              >
+            </div>
+            <div class="api-config-row">
+              <label class="api-config-label">API 密钥</label>
+              <input
+                v-model="apiConfig[platform].key"
+                type="password"
+                class="form-input"
+                placeholder="sk-..."
+              >
+            </div>
+            <!-- Sora 角色 API 配置 -->
+            <template v-if="platform === 'sora'">
+              <div class="api-config-divider">角色 API（可选）</div>
+              <div class="api-config-row">
+                <label class="api-config-label">角色地址</label>
+                <input
+                  v-model="apiConfig.sora.characterServer"
+                  type="text"
+                  class="form-input"
+                  placeholder="角色 API 地址（留空则使用主地址）"
+                >
+              </div>
+              <div class="api-config-row">
+                <label class="api-config-label">角色密钥</label>
+                <input
+                  v-model="apiConfig.sora.characterKey"
+                  type="password"
+                  class="form-input"
+                  placeholder="角色 API 密钥（留空则使用主密钥）"
+                >
+              </div>
+            </template>
+            <div class="api-config-actions">
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                :disabled="apiConfigSaving"
+                @click="saveApiConfig"
+              >
+                {{ apiConfigSaving ? '保存中...' : '💾 保存配置' }}
+              </button>
+              <span v-if="apiConfigMsg" class="api-config-msg">{{ apiConfigMsg }}</span>
+            </div>
+          </div>
+        </div>
 
         <!-- Sora 表单 -->
         <template v-if="platform === 'sora'">
@@ -1087,5 +1196,87 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 4px;
+}
+
+/* API 快捷配置 */
+.api-config-section {
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.api-config-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.api-config-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.toggle-arrow {
+  font-size: 10px;
+}
+
+.api-config-form {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.api-config-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.api-config-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 60px;
+}
+
+.api-config-row .form-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.api-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-sm {
+  padding: 5px 14px;
+  font-size: 12px;
+}
+
+.api-config-msg {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.api-config-divider {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 8px;
+  margin-top: 2px;
 }
 </style>

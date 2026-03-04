@@ -10,6 +10,7 @@ export class CreateGrokVideoDto {
   /**
    * 模型名称
    * grok-video-3 (6秒视频)
+   * grok-video-3-max (15秒视频)
    * grok-video-pro (10秒视频)
    */
   @IsString()
@@ -33,6 +34,7 @@ export class CreateGrokVideoDto {
   /**
    * 视频秒数
    * grok-video-3 固定 6 秒
+   * grok-video-3-max 固定 15 秒
    * grok-video-pro 固定 10 秒
    */
   @IsOptional()

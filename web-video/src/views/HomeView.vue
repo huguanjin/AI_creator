@@ -625,6 +625,9 @@ onMounted(async () => {
                 <option value="grok-video-3">
                   grok-video-3 (6秒)
                 </option>
+                <option value="grok-video-3-max">
+                  grok-video-3-max (15秒)
+                </option>
                 <option value="grok-video-pro">
                   grok-video-pro (10秒)
                 </option>
@@ -677,6 +680,7 @@ onMounted(async () => {
             <label class="form-label">时长</label>
             <select v-model.number="grokForm.seconds" class="form-select">
               <option :value="6">6 秒 (grok-video-3)</option>
+              <option :value="15">15 秒 (grok-video-3-max)</option>
               <option :value="10">10 秒 (grok-video-pro)</option>
             </select>
           </div>

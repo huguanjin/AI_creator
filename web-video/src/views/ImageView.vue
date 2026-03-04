@@ -64,16 +64,11 @@ const maxReferenceImages = computed(() => {
 
 // API 快捷配置
 const apiConfigVisible = ref(false)
-const apiConfigSaving = ref(false)
-const apiConfigMsg = ref('')
+const apiConfigSaving = ref<Record<string, boolean>>({ geminiImage: false, grokImage: false })
+const apiConfigMsg = ref<Record<string, string>>({ geminiImage: '', grokImage: '' })
 const apiConfig = ref<Record<string, { server: string; key: string }>>({
   geminiImage: { server: '', key: '' },
   grokImage: { server: '', key: '' },
-})
-
-// 根据当前模型决定配置服务名
-const currentImageService = computed(() => {
-  return isGrokModel.value ? 'grokImage' : 'geminiImage'
 })
 
 const loadApiConfig = async () => {
@@ -91,18 +86,17 @@ const loadApiConfig = async () => {
   }
 }
 
-const saveApiConfig = async () => {
-  const svc = currentImageService.value as 'geminiImage' | 'grokImage'
-  apiConfigSaving.value = true
+const saveApiConfig = async (svc: 'geminiImage' | 'grokImage') => {
+  apiConfigSaving.value[svc] = true
   try {
     await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
-    apiConfigMsg.value = '✅ 保存成功'
-    setTimeout(() => { apiConfigMsg.value = '' }, 2000)
+    apiConfigMsg.value[svc] = '✅ 保存成功'
+    setTimeout(() => { apiConfigMsg.value[svc] = '' }, 2000)
   } catch (e: any) {
-    apiConfigMsg.value = '❌ 保存失败'
-    setTimeout(() => { apiConfigMsg.value = '' }, 3000)
+    apiConfigMsg.value[svc] = '❌ 保存失败'
+    setTimeout(() => { apiConfigMsg.value[svc] = '' }, 3000)
   } finally {
-    apiConfigSaving.value = false
+    apiConfigSaving.value[svc] = false
   }
 }
 
@@ -461,38 +455,76 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
         <!-- API 快捷配置 -->
         <div class="api-config-section">
           <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
-            ⚙️ API 配置 ({{ isGrokModel ? 'Grok 图片' : 'Gemini 图片' }})
+            ⚙️ API 配置
             <span class="toggle-arrow">{{ apiConfigVisible ? '▲' : '▼' }}</span>
           </button>
           <div v-if="apiConfigVisible" class="api-config-form">
-            <div class="api-config-row">
-              <label class="api-config-label">API 地址</label>
-              <input
-                v-model="apiConfig[currentImageService].server"
-                type="text"
-                class="api-config-input"
-                placeholder="https://api.example.com"
-              >
+            <!-- Gemini 图片配置 -->
+            <div class="api-config-slot">
+              <div class="api-config-slot-title">💎 Gemini 图片</div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 地址</label>
+                <input
+                  v-model="apiConfig.geminiImage.server"
+                  type="text"
+                  class="api-config-input"
+                  placeholder="https://api.example.com"
+                >
+              </div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 密钥</label>
+                <input
+                  v-model="apiConfig.geminiImage.key"
+                  type="password"
+                  class="api-config-input"
+                  placeholder="sk-..."
+                >
+              </div>
+              <div class="api-config-actions">
+                <button
+                  type="button"
+                  class="api-config-save-btn"
+                  :disabled="apiConfigSaving.geminiImage"
+                  @click="saveApiConfig('geminiImage')"
+                >
+                  {{ apiConfigSaving.geminiImage ? '保存中...' : '💾 保存' }}
+                </button>
+                <span v-if="apiConfigMsg.geminiImage" class="api-config-msg">{{ apiConfigMsg.geminiImage }}</span>
+              </div>
             </div>
-            <div class="api-config-row">
-              <label class="api-config-label">API 密钥</label>
-              <input
-                v-model="apiConfig[currentImageService].key"
-                type="password"
-                class="api-config-input"
-                placeholder="sk-..."
-              >
-            </div>
-            <div class="api-config-actions">
-              <button
-                type="button"
-                class="api-config-save-btn"
-                :disabled="apiConfigSaving"
-                @click="saveApiConfig"
-              >
-                {{ apiConfigSaving ? '保存中...' : '💾 保存配置' }}
-              </button>
-              <span v-if="apiConfigMsg" class="api-config-msg">{{ apiConfigMsg }}</span>
+
+            <!-- Grok 图片配置 -->
+            <div class="api-config-slot">
+              <div class="api-config-slot-title">⚡ Grok 图片</div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 地址</label>
+                <input
+                  v-model="apiConfig.grokImage.server"
+                  type="text"
+                  class="api-config-input"
+                  placeholder="https://api.example.com"
+                >
+              </div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 密钥</label>
+                <input
+                  v-model="apiConfig.grokImage.key"
+                  type="password"
+                  class="api-config-input"
+                  placeholder="sk-..."
+                >
+              </div>
+              <div class="api-config-actions">
+                <button
+                  type="button"
+                  class="api-config-save-btn"
+                  :disabled="apiConfigSaving.grokImage"
+                  @click="saveApiConfig('grokImage')"
+                >
+                  {{ apiConfigSaving.grokImage ? '保存中...' : '💾 保存' }}
+                </button>
+                <span v-if="apiConfigMsg.grokImage" class="api-config-msg">{{ apiConfigMsg.grokImage }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1206,5 +1238,23 @@ h1 {
 .api-config-msg {
   font-size: 12px;
   color: #888;
+}
+
+.api-config-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.api-config-slot + .api-config-slot {
+  border-top: 1px dashed #e0e0e0;
+  margin-top: 2px;
+}
+
+.api-config-slot-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
 }
 </style>

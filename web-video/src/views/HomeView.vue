@@ -123,6 +123,12 @@ const statusText: Record<string, string> = {
   failed: '失败',
 }
 
+// 检查当前平台 API 是否已配置
+const isApiConfigMissing = computed(() => {
+  const cfg = apiConfig.value[platform.value]
+  return !cfg || !cfg.server || !cfg.key
+})
+
 const recentTasks = computed(() => store.tasks.slice(0, 5))
 
 // 创建视频
@@ -423,6 +429,9 @@ onMounted(async () => {
         </h2>
 
         <!-- API 快捷配置 -->
+        <div v-if="isApiConfigMissing" class="api-config-warning" @click="apiConfigVisible = true">
+          ⚠️ 当前平台尚未配置 API 地址或密钥，请先展开下方配置并填写
+        </div>
         <div class="api-config-section">
           <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
             ⚙️ API 配置
@@ -981,7 +990,7 @@ onMounted(async () => {
         <button
           class="btn btn-primary"
           style="width: 100%"
-          :disabled="isLoading"
+          :disabled="isLoading || isApiConfigMissing"
           @click="createVideo"
         >
           <span v-if="isLoading" class="loading" />
@@ -1278,5 +1287,21 @@ onMounted(async () => {
   border-top: 1px dashed rgba(255, 255, 255, 0.1);
   padding-top: 8px;
   margin-top: 2px;
+}
+
+.api-config-warning {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  color: #eab308;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-config-warning:hover {
+  background: rgba(234, 179, 8, 0.18);
 }
 </style>

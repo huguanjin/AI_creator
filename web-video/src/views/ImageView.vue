@@ -104,6 +104,16 @@ onMounted(async () => {
   await loadApiConfig()
 })
 
+// 检查当前模型对应的 API 是否已配置
+const isApiConfigMissing = computed(() => {
+  if (isGrokModel.value) {
+    const cfg = apiConfig.value.grokImage
+    return !cfg || !cfg.server || !cfg.key
+  }
+  const cfg = apiConfig.value.geminiImage
+  return !cfg || !cfg.server || !cfg.key
+})
+
 // 自定义模型输入
 const modelCustom = ref(false)
 
@@ -453,6 +463,9 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
       <!-- 左侧：表单 -->
       <div class="form-panel">
         <!-- API 快捷配置 -->
+        <div v-if="isApiConfigMissing" class="api-config-warning" @click="apiConfigVisible = true">
+          ⚠️ 当前模型对应的 API 尚未配置，请先展开下方配置并填写 {{ isGrokModel ? 'Grok 图片' : 'Gemini 图片' }} 的 API 地址和密钥
+        </div>
         <div class="api-config-section">
           <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
             ⚙️ API 配置
@@ -633,7 +646,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
         <div class="action-buttons">
           <button
             class="generate-btn"
-            :disabled="isLoading || !imageForm.prompt.trim()"
+            :disabled="isLoading || !imageForm.prompt.trim() || isApiConfigMissing"
             @click="generateImage"
           >
             {{ isLoading ? '生成中...' : '🚀 立即生成' }}
@@ -1256,5 +1269,21 @@ h1 {
   font-size: 13px;
   font-weight: 600;
   color: #555;
+}
+
+.api-config-warning {
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(234, 179, 8, 0.1);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  border-radius: 8px;
+  color: #b8860b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.api-config-warning:hover {
+  background: rgba(234, 179, 8, 0.18);
 }
 </style>

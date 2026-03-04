@@ -553,6 +553,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
               </optgroup>
               <optgroup label="Grok">
                 <option value="grok-4-1-image">grok-4-1-image</option>
+                <option value="grok-4-2-image">grok-4-2-image</option>
               </optgroup>
               <optgroup label="GPT">
                 <option value="gpt-image-1.5">gpt-image-1.5</option>

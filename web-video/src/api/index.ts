@@ -522,6 +522,12 @@ export const adminApi = {
       { params },
     ),
 
+  // 获取用户完整配置（含 API Key，管理员专用）
+  getUserFullConfig: (userId: string) =>
+    api.get<{ status: string; data: { userId: string; username: string; config: UserApiConfig | null; updated_at: string | null } }>(
+      `/v1/admin/users/${encodeURIComponent(userId)}/config`,
+    ),
+
   // 获取平台统计概览
   getStats: () =>
     api.get<{ status: string; data: AdminStats }>('/v1/admin/stats'),

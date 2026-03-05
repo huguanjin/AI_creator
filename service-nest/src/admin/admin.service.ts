@@ -117,6 +117,34 @@ export class AdminService implements OnApplicationBootstrap {
   }
 
   /**
+   * 获取用户完整配置（含完整 API Key，供管理员查看）
+   */
+  async getUserFullConfig(userId: string) {
+    const userCol = this.databaseService.getCollection('users')
+    let user: any
+    try {
+      user = await userCol.findOne(
+        { _id: new ObjectId(userId) },
+        { projection: { password: 0 } },
+      )
+    } catch {
+      return null
+    }
+    if (!user) return null
+
+    const configCol = this.databaseService.getCollection('user_configs')
+    const configDoc: any = await configCol.findOne({ userId })
+    const config = configDoc?.config || null
+
+    return {
+      userId,
+      username: user.username,
+      config: config || null,
+      updated_at: configDoc?.updated_at || null,
+    }
+  }
+
+  /**
    * 获取指定用户的视频任务
    */
   async getUserVideoTasks(

@@ -42,6 +42,12 @@ const resetPasswordLoading = ref(false)
 const resetPasswordMsg = ref('')
 const resetPasswordError = ref('')
 
+// 查看完整配置
+const fullConfigModal = ref(false)
+const fullConfigLoading = ref(false)
+const fullConfigData = ref<any>(null)
+const fullConfigUsername = ref('')
+
 // ============ 格式化 ============
 const formatTime = (ts: number) => {
   if (!ts) return '-'
@@ -216,6 +222,44 @@ const submitResetPassword = async () => {
     resetPasswordLoading.value = false
   }
 }
+
+// ============ 查看完整配置 ============
+const openFullConfig = async (userId: string) => {
+  fullConfigModal.value = true
+  fullConfigLoading.value = true
+  fullConfigData.value = null
+  fullConfigUsername.value = ''
+  try {
+    const res = await adminApi.getUserFullConfig(userId)
+    fullConfigData.value = res.data.data?.config || null
+    fullConfigUsername.value = res.data.data?.username || userId
+  } catch (e: any) {
+    console.error('加载用户完整配置失败:', e)
+  } finally {
+    fullConfigLoading.value = false
+  }
+}
+
+const closeFullConfig = () => {
+  fullConfigModal.value = false
+  fullConfigData.value = null
+}
+
+const serviceLabels: Record<string, string> = {
+  sora: 'Sora',
+  veo: 'VEO',
+  geminiImage: 'Gemini Image',
+  grok: 'Grok',
+  grokImage: 'Grok Image',
+  doubao: '豆包 (Doubao)',
+}
+
+const fieldLabels: Record<string, string> = {
+  server: 'API 地址',
+  key: 'API 密钥',
+  characterServer: '角色 API 地址',
+  characterKey: '角色 API 密钥',
+}
 </script>
 
 <template>
@@ -360,7 +404,12 @@ const submitResetPassword = async () => {
             <p><strong>图片任务数：</strong>{{ userDetail.imageTaskCount }}</p>
           </div>
           <div v-if="userDetail.config" class="config-section">
-            <h4>API 配置</h4>
+            <div class="config-section-header">
+              <h4>API 配置</h4>
+              <button class="btn btn-small" @click="openFullConfig(expandedUserId!)">
+                🔑 查看完整配置
+              </button>
+            </div>
             <div v-for="(cfg, service) in userDetail.config" :key="service" class="config-item">
               <div class="config-service">{{ service }}</div>
               <div class="config-detail">
@@ -471,6 +520,35 @@ const submitResetPassword = async () => {
           >
             {{ resetPasswordLoading ? '提交中...' : '确认重置' }}
           </button>
+        </div>
+      </div>
+    </div>
+    <!-- 查看完整配置弹窗 -->
+    <div v-if="fullConfigModal" class="modal-overlay" @click.self="closeFullConfig">
+      <div class="modal modal-wide">
+        <div class="modal-header">
+          <h3>🔑 用户完整配置 - {{ fullConfigUsername }}</h3>
+          <button class="modal-close" @click="closeFullConfig">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="fullConfigLoading" class="detail-loading">加载中...</div>
+          <div v-else-if="!fullConfigData" class="empty">该用户未配置 API</div>
+          <div v-else class="full-config-list">
+            <div v-for="(cfg, service) in fullConfigData" :key="service" class="full-config-item">
+              <div class="full-config-service">{{ serviceLabels[service as string] || service }}</div>
+              <div class="full-config-fields">
+                <div v-for="(value, field) in cfg" :key="field" class="full-config-field">
+                  <span class="full-config-label">{{ fieldLabels[field as string] || field }}：</span>
+                  <span class="full-config-value" :class="{ 'is-key': (field as string).toLowerCase().includes('key') }">
+                    {{ value || '（未配置）' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="closeFullConfig">关闭</button>
         </div>
       </div>
     </div>
@@ -785,6 +863,19 @@ const submitResetPassword = async () => {
   margin: 0 0 12px 0;
 }
 
+.config-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.config-section-header h4 {
+  color: #aaa;
+  font-size: 14px;
+  margin: 0;
+}
+
 .config-item {
   background: #252536;
   border-radius: 8px;
@@ -1041,5 +1132,73 @@ const submitResetPassword = async () => {
   gap: 8px;
   padding: 12px 20px;
   border-top: 1px solid #333;
+}
+
+/* ============ 完整配置弹窗 ============ */
+.modal-wide {
+  width: 640px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-wide .modal-body {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.full-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.full-config-item {
+  background: #252536;
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.full-config-service {
+  font-weight: 600;
+  color: #a78bfa;
+  font-size: 15px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+}
+
+.full-config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.full-config-field {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.full-config-label {
+  color: #888;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.full-config-value {
+  color: #ccc;
+  word-break: break-all;
+}
+
+.full-config-value.is-key {
+  font-family: monospace;
+  color: #67e8f9;
+  background: #1a1a2e;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
 }
 </style>

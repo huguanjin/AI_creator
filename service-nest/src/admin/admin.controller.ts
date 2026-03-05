@@ -83,6 +83,26 @@ export class AdminController {
   }
 
   /**
+   * 获取指定用户的完整配置（含 API Key，供管理员查看）
+   * GET /v1/admin/users/:userId/config
+   */
+  @Get('users/:userId/config')
+  async getUserFullConfig(@Req() req: any, @Param('userId') userId: string) {
+    this.ensureAdmin(req)
+    this.logger.log(`👑 Admin viewing user full config: ${userId}`)
+
+    const result = await this.adminService.getUserFullConfig(userId)
+    if (!result) {
+      throw new HttpException(
+        { status: 'error', message: '用户不存在' },
+        HttpStatus.NOT_FOUND,
+      )
+    }
+
+    return { status: 'success', data: result }
+  }
+
+  /**
    * 获取指定用户的视频任务列表
    * GET /v1/admin/users/:userId/video-tasks?page=1&limit=20&platform=sora
    */

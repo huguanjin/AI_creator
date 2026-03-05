@@ -357,7 +357,7 @@ MIT
 <br> `付款备注上您的联系方式`
 <div style="display: flex; flex-wrap: wrap">
     <div style="width:200px">
-        <img src="./docs/images\微信收款码.jpg"  style="width:200px">
+        <img src="./docs/images\微信收款码.png"  style="width:200px">
         <div>微信捐助</div>
     </div>
     <div style="width:200px">

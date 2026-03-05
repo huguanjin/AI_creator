@@ -130,6 +130,15 @@ const isApiConfigMissing = computed(() => {
   return !cfg || !cfg.server || !cfg.key
 })
 
+// 检查当前平台 API 地址是否末尾有 /
+const hasApiServerTrailingSlash = computed(() => {
+  const cfg = apiConfig.value[platform.value]
+  if (!cfg) return false
+  if (hasTrailingSlash(cfg.server)) return true
+  if (platform.value === 'sora' && hasTrailingSlash(cfg.characterServer || '')) return true
+  return false
+})
+
 const recentTasks = computed(() => store.tasks.slice(0, 5))
 
 // 创建视频
@@ -432,6 +441,9 @@ onMounted(async () => {
         <!-- API 快捷配置 -->
         <div v-if="isApiConfigMissing" class="api-config-warning" @click="apiConfigVisible = true">
           ⚠️ 当前平台尚未配置 API 地址或密钥，请先展开下方配置并填写
+        </div>
+        <div v-if="!apiConfigVisible && hasApiServerTrailingSlash" class="api-config-warning" @click="apiConfigVisible = true">
+          ⚠️ API 地址末尾不需要 /，请展开配置并删除
         </div>
         <div class="api-config-section">
           <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">

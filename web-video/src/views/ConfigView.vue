@@ -459,6 +459,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.sora.server }}</span>
+            <span v-if="hasTrailingSlash(config.sora.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>
@@ -467,6 +468,7 @@ onMounted(() => {
           <div class="config-item">
             <label>角色服务地址</label>
             <span class="value">{{ config.sora.characterServer || '(未设置)' }}</span>
+            <span v-if="hasTrailingSlash(config.sora.characterServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>角色服务 Key</label>
@@ -519,6 +521,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.veo.server }}</span>
+            <span v-if="hasTrailingSlash(config.veo.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>
@@ -562,6 +565,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.geminiImage.server }}</span>
+            <span v-if="hasTrailingSlash(config.geminiImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>
@@ -605,6 +609,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.grok?.server || '(未设置)' }}</span>
+            <span v-if="hasTrailingSlash(config.grok?.server || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>
@@ -648,6 +653,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.grokImage?.server || '(未设置)' }}</span>
+            <span v-if="hasTrailingSlash(config.grokImage?.server || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>
@@ -691,6 +697,7 @@ onMounted(() => {
           <div class="config-item">
             <label>API 地址</label>
             <span class="value">{{ config.doubao?.server || '(未设置)' }}</span>
+            <span v-if="hasTrailingSlash(config.doubao?.server || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
             <label>API Key</label>

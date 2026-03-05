@@ -115,6 +115,12 @@ const isApiConfigMissing = computed(() => {
   return !cfg || !cfg.server || !cfg.key
 })
 
+// 检查图片 API 地址是否末尾有 /
+const hasApiServerTrailingSlash = computed(() => {
+  return hasTrailingSlash(apiConfig.value.geminiImage?.server || '')
+    || hasTrailingSlash(apiConfig.value.grokImage?.server || '')
+})
+
 // 自定义模型输入
 const modelCustom = ref(false)
 
@@ -466,6 +472,9 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
         <!-- API 快捷配置 -->
         <div v-if="isApiConfigMissing" class="api-config-warning" @click="apiConfigVisible = true">
           ⚠️ 当前模型对应的 API 尚未配置，请先展开下方配置并填写 {{ isGrokModel ? 'Grok 图片' : 'Gemini 图片' }} 的 API 地址和密钥
+        </div>
+        <div v-if="!apiConfigVisible && hasApiServerTrailingSlash" class="api-config-warning" @click="apiConfigVisible = true">
+          ⚠️ API 地址末尾不需要 /，请展开配置并删除
         </div>
         <div class="api-config-section">
           <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">

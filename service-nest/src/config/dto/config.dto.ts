@@ -106,4 +106,12 @@ export class UpdateServiceConfigDto {
   @IsOptional()
   @IsString()
   characterKey?: string
+
+  @IsOptional()
+  @IsString()
+  url?: string
+
+  @IsOptional()
+  @IsString()
+  content?: string
 }

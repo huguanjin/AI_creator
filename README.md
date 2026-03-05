@@ -2,6 +2,8 @@
 
 AI 创作平台 - 支持 OpenAI Sora、Google VEO、Grok 视频生成，以及 Gemini 图片创作
 
+**在线体验：** [https://creator.vertexgen.net](https://creator.vertexgen.net)
+
 ## 项目介绍
 
 本项目是一个基于多个 AI 模型的创作平台，支持 **OpenAI Sora**、**Google VEO**、**Grok** 视频生成及 **Gemini** 图片创作。采用前后端分离架构，内置用户认证与多用户管理系统：
@@ -41,6 +43,17 @@ AI 创作平台 - 支持 OpenAI Sora、Google VEO、Grok 视频生成，以及 G
 - [x] **管理员面板** - 用户管理、任务统计、平台概览
 - [x] **文件存储** - 图片按用户文件夹隔离存储，支持静态文件访问
 - [x] **MongoDB 持久化** - 用户数据、任务记录、配置信息持久化存储
+
+## 效果展示
+
+### 视频创作页面
+![视频创作页面](./docs/images/视频创作页面.png)
+
+### 视频任务列表
+![视频任务列表](./docs/images/视频任务列表.png)
+
+### 图片创作列表
+![图片创作列表](./docs/images/图片创作列表.png)
 
 ## 项目结构
 
@@ -344,11 +357,11 @@ MIT
 <br> `付款备注上您的联系方式`
 <div style="display: flex; flex-wrap: wrap">
     <div style="width:200px">
-        <img src="./docs/wxpay.jpg"  style="width:200px">
+        <img src="./docs/images\微信收款码.jpg"  style="width:200px">
         <div>微信捐助</div>
     </div>
     <div style="width:200px">
-        <img src="./docs/alipay.jpg"  style="width:200px"> 
+        <img src="./docs/images\支付宝收款码.jpg"  style="width:200px"> 
         <div>支付宝捐助</div>
     </div>
 </div>

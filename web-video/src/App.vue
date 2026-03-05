@@ -81,6 +81,23 @@
     <main class="container">
       <router-view />
     </main>
+
+    <!-- 页脚 -->
+    <footer v-if="showHeader && footerContent" class="app-footer">
+      <div class="footer-content">{{ footerContent }}</div>
+    </footer>
+
+    <!-- 悬浮二维码 -->
+    <div v-if="showHeader && qrcodeUrl" class="floating-qrcode">
+      <div class="qrcode-trigger">
+        <img :src="qrcodeUrl" alt="沟通群二维码" class="qrcode-thumb" />
+        <span class="qrcode-label">交流群</span>
+      </div>
+      <div class="qrcode-popup">
+        <img :src="qrcodeUrl" alt="沟通群二维码" class="qrcode-full" />
+        <p class="qrcode-tip">扫码加入项目沟通群</p>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -100,10 +117,18 @@ const avatarChar = computed(() => (authStore.username || '?').charAt(0).toUpperC
 // 使用教程链接
 const tutorialUrl = ref('')
 
+// 二维码图片 URL
+const qrcodeUrl = ref('')
+
+// 页脚内容
+const footerContent = ref('')
+
 const loadTutorialUrl = async () => {
   try {
     const res = await configApi.getConfig()
     tutorialUrl.value = res.data.data.tutorialUrl || ''
+    qrcodeUrl.value = res.data.data.qrcodeUrl || ''
+    footerContent.value = res.data.data.footerContent || ''
   } catch {}
 }
 
@@ -418,5 +443,113 @@ onUnmounted(() => document.removeEventListener('click', closePanel))
 .confirm-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ===== 页脚 ===== */
+.app-footer {
+  padding: 16px 24px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: auto;
+}
+
+.footer-content {
+  color: #888;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  white-space: pre-line;
+}
+
+/* ===== 悬浮二维码 ===== */
+.floating-qrcode {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 999;
+}
+
+.qrcode-trigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 8px;
+  background: rgba(30, 30, 46, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.qrcode-trigger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  border-color: rgba(102, 126, 234, 0.5);
+}
+
+.qrcode-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.qrcode-label {
+  color: #aaa;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.qrcode-popup {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(0.95);
+  transition: all 0.25s ease;
+  pointer-events: none;
+}
+
+.floating-qrcode:hover .qrcode-popup {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.qrcode-popup::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  right: 20px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  transform: rotate(45deg);
+  box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.qrcode-full {
+  width: 200px;
+  height: 200px;
+  border-radius: 8px;
+  object-fit: contain;
+  display: block;
+}
+
+.qrcode-tip {
+  margin: 10px 0 0;
+  text-align: center;
+  color: #666;
+  font-size: 13px;
 }
 </style>

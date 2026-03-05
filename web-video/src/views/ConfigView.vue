@@ -288,10 +288,84 @@ const cancelTutorialEdit = () => {
   tutorialEditMode.value = false
 }
 
+// ============ 二维码图片配置（仅管理员） ============
+const qrcodeEditMode = ref(false)
+const qrcodeUrl = ref('')
+const qrcodeEditUrl = ref('')
+
+const loadQrcodeConfig = async () => {
+  if (!authStore.isAdmin) return
+  try {
+    const res = await configApi.getConfig()
+    qrcodeUrl.value = res.data.data.qrcodeUrl || ''
+  } catch {}
+}
+
+const enterQrcodeEdit = () => {
+  qrcodeEditUrl.value = qrcodeUrl.value
+  qrcodeEditMode.value = true
+}
+
+const saveQrcodeConfig = async () => {
+  isSaving.value = true
+  try {
+    await configApi.updateServiceConfig('qrcode', { url: qrcodeEditUrl.value.trim() })
+    await loadQrcodeConfig()
+    qrcodeEditMode.value = false
+    showMessage('二维码图片链接已更新！', 'success')
+  } catch (e: any) {
+    showMessage(e.response?.data?.message || e.message || '保存失败', 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const cancelQrcodeEdit = () => {
+  qrcodeEditMode.value = false
+}
+
+// ============ 页脚内容配置（仅管理员） ============
+const footerEditMode = ref(false)
+const footerContent = ref('')
+const footerEditContent = ref('')
+
+const loadFooterConfig = async () => {
+  if (!authStore.isAdmin) return
+  try {
+    const res = await configApi.getConfig()
+    footerContent.value = res.data.data.footerContent || ''
+  } catch {}
+}
+
+const enterFooterEdit = () => {
+  footerEditContent.value = footerContent.value
+  footerEditMode.value = true
+}
+
+const saveFooterConfig = async () => {
+  isSaving.value = true
+  try {
+    await configApi.updateServiceConfig('footer', { content: footerEditContent.value })
+    await loadFooterConfig()
+    footerEditMode.value = false
+    showMessage('页脚内容已更新！', 'success')
+  } catch (e: any) {
+    showMessage(e.response?.data?.message || e.message || '保存失败', 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const cancelFooterEdit = () => {
+  footerEditMode.value = false
+}
+
 onMounted(() => {
   loadConfig()
   loadEmailConfig()
   loadTutorialConfig()
+  loadQrcodeConfig()
+  loadFooterConfig()
 })
 </script>
 
@@ -752,6 +826,84 @@ onMounted(() => {
         </div>
       </div>
 
+      <!-- 二维码图片配置（仅管理员可见） -->
+      <div v-if="authStore.isAdmin" class="config-section qrcode-section">
+        <div class="section-header">
+          <h2>📱 项目沟通群二维码</h2>
+          <button
+            v-if="!qrcodeEditMode"
+            class="edit-btn"
+            @click="enterQrcodeEdit"
+          >
+            ✏️ 编辑
+          </button>
+        </div>
+
+        <div v-if="!qrcodeEditMode" class="config-display">
+          <div class="config-item">
+            <label>二维码图片 URL</label>
+            <span v-if="qrcodeUrl" class="value">
+              <a :href="qrcodeUrl" target="_blank" rel="noopener noreferrer" style="color: #667eea; text-decoration: underline;">{{ qrcodeUrl }}</a>
+            </span>
+            <span v-else class="value" style="color: #999;">(未设置，设置后页面右下角将显示悬浮二维码)</span>
+          </div>
+          <div v-if="qrcodeUrl" class="qrcode-preview">
+            <label>预览</label>
+            <img :src="qrcodeUrl" alt="二维码预览" style="max-width: 150px; border-radius: 8px; border: 1px solid #eee;" />
+          </div>
+        </div>
+
+        <div v-else class="config-edit">
+          <div class="form-group">
+            <label>二维码图片 URL</label>
+            <input v-model="qrcodeEditUrl" type="text" placeholder="https://example.com/qrcode.png" />
+          </div>
+          <p style="color: #999; font-size: 12px; margin-bottom: 12px;">提示：设置后页面右下角将显示悬浮二维码图片，用户鼠标悬停可放大查看。清空链接则隐藏二维码。</p>
+          <div class="button-group">
+            <button class="save-btn" :disabled="isSaving" @click="saveQrcodeConfig">
+              {{ isSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button class="cancel-btn" @click="cancelQrcodeEdit">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 页脚内容配置（仅管理员可见） -->
+      <div v-if="authStore.isAdmin" class="config-section footer-section">
+        <div class="section-header">
+          <h2>📄 页脚设置</h2>
+          <button
+            v-if="!footerEditMode"
+            class="edit-btn"
+            @click="enterFooterEdit"
+          >
+            ✏️ 编辑
+          </button>
+        </div>
+
+        <div v-if="!footerEditMode" class="config-display">
+          <div class="config-item">
+            <label>页脚内容</label>
+            <span v-if="footerContent" class="value">{{ footerContent }}</span>
+            <span v-else class="value" style="color: #999;">(未设置，设置后页面底部将显示页脚信息)</span>
+          </div>
+        </div>
+
+        <div v-else class="config-edit">
+          <div class="form-group">
+            <label>页脚内容</label>
+            <textarea v-model="footerEditContent" rows="3" placeholder="例如：© 2026 AI 创作平台 | 联系邮箱：admin@example.com" style="padding: 10px 14px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; resize: vertical; font-family: inherit;"></textarea>
+          </div>
+          <p style="color: #999; font-size: 12px; margin-bottom: 12px;">提示：页脚内容将显示在页面底部，支持纯文本。清空内容则隐藏页脚。</p>
+          <div class="button-group">
+            <button class="save-btn" :disabled="isSaving" @click="saveFooterConfig">
+              {{ isSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button class="cancel-btn" @click="cancelFooterEdit">取消</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 说明 -->
       <div class="info-section">
         <h3>📝 说明</h3>
@@ -1062,6 +1214,33 @@ h1 {
 
 .tutorial-section {
   border-left: 4px solid #22c55e;
+}
+
+.qrcode-section {
+  border-left: 4px solid #f59e0b;
+}
+
+.qrcode-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.qrcode-preview label {
+  min-width: 120px;
+  font-weight: 500;
+  color: #555;
+  padding-top: 4px;
+}
+
+.footer-section {
+  border-left: 4px solid #8b5cf6;
+}
+
+.footer-section textarea {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ssl-toggle {

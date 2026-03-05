@@ -374,6 +374,8 @@ export interface AppConfig {
   doubao: ServiceConfig
   email: EmailConfig
   tutorialUrl: string
+  qrcodeUrl: string
+  footerContent: string
 }
 
 export const configApi = {

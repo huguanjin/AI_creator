@@ -40,6 +40,8 @@ export interface AppConfig {
     smtpFrom: string
   }
   tutorialUrl: string
+  qrcodeUrl: string
+  footerContent: string
 }
 
 @Injectable()
@@ -77,6 +79,8 @@ export class ConfigService implements OnApplicationBootstrap {
           doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
+          qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
+          footerContent: stored.footerContent ?? defaults.footerContent,
         }
         this.logger.log('✅ Config loaded from MongoDB')
       } else {
@@ -152,6 +156,8 @@ export class ConfigService implements OnApplicationBootstrap {
         smtpFrom: process.env.SMTP_FROM || '18508593098@163.com',
       },
       tutorialUrl: process.env.TUTORIAL_URL || '',
+      qrcodeUrl: process.env.QRCODE_URL || '',
+      footerContent: process.env.FOOTER_CONTENT || '',
     }
   }
 
@@ -182,6 +188,8 @@ export class ConfigService implements OnApplicationBootstrap {
           doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
+          qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
+          footerContent: stored.footerContent ?? defaults.footerContent,
         }
       }
     } catch (error) {
@@ -232,6 +240,8 @@ export class ConfigService implements OnApplicationBootstrap {
         smtpFrom: config.email?.smtpFrom ?? '',
       },
       tutorialUrl: config.tutorialUrl ?? '',
+      qrcodeUrl: config.qrcodeUrl ?? '',
+      footerContent: config.footerContent ?? '',
     }
   }
 
@@ -263,8 +273,8 @@ export class ConfigService implements OnApplicationBootstrap {
    * 更新单个服务配置
    */
   async updateServiceConfig(
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'email' | 'tutorial',
-    config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string },
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'email' | 'tutorial' | 'qrcode' | 'footer',
+    config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string; content?: string },
   ): Promise<AppConfig> {
     const currentConfig = this.getConfig()
     
@@ -306,6 +316,10 @@ export class ConfigService implements OnApplicationBootstrap {
       if (config.smtpFrom !== undefined) currentConfig.email.smtpFrom = config.smtpFrom
     } else if (service === 'tutorial') {
       if (config.url !== undefined) currentConfig.tutorialUrl = config.url
+    } else if (service === 'qrcode') {
+      if (config.url !== undefined) currentConfig.qrcodeUrl = config.url
+    } else if (service === 'footer') {
+      if (config.content !== undefined) currentConfig.footerContent = config.content
     }
 
     this.config = currentConfig

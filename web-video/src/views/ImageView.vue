@@ -66,6 +66,7 @@ const maxReferenceImages = computed(() => {
 const apiConfigVisible = ref(false)
 const apiConfigSaving = ref<Record<string, boolean>>({ geminiImage: false, grokImage: false })
 const apiConfigMsg = ref<Record<string, string>>({ geminiImage: '', grokImage: '' })
+const hasTrailingSlash = (url: string) => !!url && url.endsWith('/')
 const apiConfig = ref<Record<string, { server: string; key: string }>>({
   geminiImage: { server: '', key: '' },
   grokImage: { server: '', key: '' },
@@ -483,6 +484,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                   class="api-config-input"
                   placeholder="https://api.example.com"
                 >
+                <span v-if="hasTrailingSlash(apiConfig.geminiImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
               </div>
               <div class="api-config-row">
                 <label class="api-config-label">API 密钥</label>
@@ -517,6 +519,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                   class="api-config-input"
                   placeholder="https://api.example.com"
                 >
+                <span v-if="hasTrailingSlash(apiConfig.grokImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
               </div>
               <div class="api-config-row">
                 <label class="api-config-label">API 密钥</label>
@@ -733,6 +736,14 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 </template>
 
 <style scoped>
+.field-warning {
+  display: block;
+  color: #e67e22;
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 .image-generator {
   padding: 20px;
   max-width: 1400px;

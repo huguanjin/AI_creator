@@ -75,6 +75,7 @@ const doubaoLastFrameInput = ref<HTMLInputElement | null>(null)
 const apiConfigVisible = ref(false)
 const apiConfigSaving = ref(false)
 const apiConfigMsg = ref('')
+const hasTrailingSlash = (url: string) => !!url && url.endsWith('/')
 const apiConfig = ref<Record<string, { server: string; key: string; characterServer?: string; characterKey?: string }>>({
   sora: { server: '', key: '', characterServer: '', characterKey: '' },
   veo: { server: '', key: '' },
@@ -446,6 +447,7 @@ onMounted(async () => {
                 class="form-input"
                 placeholder="https://api.example.com"
               >
+              <span v-if="hasTrailingSlash(apiConfig[platform].server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
             </div>
             <div class="api-config-row">
               <label class="api-config-label">API 密钥</label>
@@ -467,6 +469,7 @@ onMounted(async () => {
                   class="form-input"
                   placeholder="角色 API 地址（留空则使用主地址）"
                 >
+                <span v-if="hasTrailingSlash(apiConfig.sora.characterServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
               </div>
               <div class="api-config-row">
                 <label class="api-config-label">角色密钥</label>
@@ -1049,6 +1052,14 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.field-warning {
+  display: block;
+  color: #e67e22;
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
 .task-list {
   display: flex;
   flex-direction: column;

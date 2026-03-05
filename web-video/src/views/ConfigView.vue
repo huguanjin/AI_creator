@@ -71,6 +71,9 @@ const showMessage = (msg: string, type: 'success' | 'error' = 'success') => {
   }, 3000)
 }
 
+// 检测 API 地址末尾是否有 /
+const hasTrailingSlash = (url: string) => !!url && url.endsWith('/')
+
 // 加载配置
 const loadConfig = async () => {
   isLoading.value = true
@@ -396,6 +399,7 @@ onMounted(() => {
           <div class="form-group">
             <label>默认 API 地址</label>
             <input v-model="defaultForm.server" type="text" placeholder="https://api.example.com" />
+            <span v-if="hasTrailingSlash(defaultForm.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>默认 API Key</label>
@@ -474,6 +478,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.sora.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.sora.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -482,6 +487,7 @@ onMounted(() => {
           <div class="form-group">
             <label>角色服务地址</label>
             <input v-model="editForm.sora.characterServer" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.sora.characterServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>角色服务 Key</label>
@@ -524,6 +530,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.veo.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.veo.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -566,6 +573,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.geminiImage.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.geminiImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -608,6 +616,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.grok.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.grok.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -650,6 +659,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.grokImage.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.grokImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -692,6 +702,7 @@ onMounted(() => {
           <div class="form-group">
             <label>API 地址</label>
             <input v-model="editForm.doubao.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.doubao.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
             <label>API Key</label>
@@ -924,6 +935,14 @@ onMounted(() => {
   max-width: 900px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.field-warning {
+  display: block;
+  color: #e67e22;
+  font-size: 12px;
+  margin-top: 4px;
+  font-weight: 500;
 }
 
 h1 {

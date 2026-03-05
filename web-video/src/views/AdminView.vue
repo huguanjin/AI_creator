@@ -335,28 +335,151 @@ const fieldLabels: Record<string, string> = {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="user in users" :key="user._id">
-              <td class="username-cell">{{ user.username }}</td>
-              <td><span class="role-badge" :class="user.role">{{ roleText(user.role) }}</span></td>
-              <td>{{ formatTime(user.created_at) }}</td>
-              <td>{{ formatTime(user.last_login) }}</td>
-              <td>{{ user.videoTaskCount }}</td>
-              <td>{{ user.imageTaskCount }}</td>
-              <td>
-                <div class="action-btns">
-                  <button class="btn btn-small" @click="toggleExpand(user._id)">
-                    {{ expandedUserId === user._id ? '收起' : '查看详情' }}
-                  </button>
-                  <button
-                    class="btn btn-small btn-warn"
-                    @click="openResetPassword(user)"
-                    v-if="user._id !== authStore.userId"
-                  >
-                    重置密码
-                  </button>
-                </div>
-              </td>
-            </tr>
+            <template v-for="user in users" :key="user._id">
+              <tr :class="{ 'row-expanded': expandedUserId === user._id }">
+                <td class="username-cell">{{ user.username }}</td>
+                <td><span class="role-badge" :class="user.role">{{ roleText(user.role) }}</span></td>
+                <td>{{ formatTime(user.created_at) }}</td>
+                <td>{{ formatTime(user.last_login) }}</td>
+                <td>{{ user.videoTaskCount }}</td>
+                <td>{{ user.imageTaskCount }}</td>
+                <td>
+                  <div class="action-btns">
+                    <button class="btn btn-small" @click="toggleExpand(user._id)">
+                      {{ expandedUserId === user._id ? '收起' : '查看详情' }}
+                    </button>
+                    <button
+                      class="btn btn-small btn-warn"
+                      @click="openResetPassword(user)"
+                      v-if="user._id !== authStore.userId"
+                    >
+                      重置密码
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <!-- 内联用户详情行 -->
+              <tr v-if="expandedUserId === user._id" class="detail-inline-row">
+                <td colspan="7" class="detail-inline-cell">
+                  <div class="detail-panel">
+                    <div class="detail-tabs">
+                      <button
+                        class="tab-btn"
+                        :class="{ active: expandedTab === 'config' }"
+                        @click="switchTab('config')"
+                      >配置信息</button>
+                      <button
+                        class="tab-btn"
+                        :class="{ active: expandedTab === 'video' }"
+                        @click="switchTab('video')"
+                      >视频任务</button>
+                      <button
+                        class="tab-btn"
+                        :class="{ active: expandedTab === 'image' }"
+                        @click="switchTab('image')"
+                      >图片任务</button>
+                    </div>
+
+                    <div v-if="detailLoading" class="detail-loading">加载中...</div>
+
+                    <!-- 配置信息 -->
+                    <div v-else-if="expandedTab === 'config'" class="detail-content">
+                      <div v-if="userDetail">
+                        <div class="user-basic-info">
+                          <p><strong>用户ID：</strong>{{ userDetail.user._id }}</p>
+                          <p><strong>用户名：</strong>{{ userDetail.user.username }}</p>
+                          <p><strong>角色：</strong>{{ roleText(userDetail.user.role) }}</p>
+                          <p><strong>视频任务数：</strong>{{ userDetail.videoTaskCount }}</p>
+                          <p><strong>图片任务数：</strong>{{ userDetail.imageTaskCount }}</p>
+                        </div>
+                        <div v-if="userDetail.config" class="config-section">
+                          <div class="config-section-header">
+                            <h4>API 配置</h4>
+                            <button class="btn btn-small" @click="openFullConfig(expandedUserId!)">
+                              🔑 查看完整配置
+                            </button>
+                          </div>
+                          <div v-for="(cfg, service) in userDetail.config" :key="service" class="config-item">
+                            <div class="config-service">{{ service }}</div>
+                            <div class="config-detail">
+                              <span class="config-label">Server:</span>
+                              <span class="config-value">{{ cfg.server || '-' }}</span>
+                            </div>
+                            <div class="config-detail">
+                              <span class="config-label">Key:</span>
+                              <span class="config-value mono">{{ cfg.key || '-' }}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-else class="empty">该用户未配置 API</div>
+                      </div>
+                    </div>
+
+                    <!-- 视频任务 -->
+                    <div v-else-if="expandedTab === 'video'" class="detail-content">
+                      <div v-if="userVideoTasks.length === 0" class="empty">暂无视频任务</div>
+                      <div v-else class="task-list">
+                        <div v-for="task in userVideoTasks" :key="task.externalTaskId || task._id" class="task-card">
+                          <div class="task-header">
+                            <span class="platform-badge">{{ task.platform }}</span>
+                            <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
+                            <span class="task-time">{{ formatTime(task.createdAt) }}</span>
+                          </div>
+                          <div class="task-prompt">{{ task.prompt }}</div>
+                          <div class="task-meta">
+                            <span>模型: {{ task.model }}</span>
+                            <span v-if="task.video_url">
+                              <a :href="task.video_url" target="_blank" class="video-link">查看视频</a>
+                            </span>
+                          </div>
+                        </div>
+                        <!-- 视频分页 -->
+                        <div class="pagination" v-if="videoTotal > 10">
+                          <button class="btn btn-small" :disabled="videoPage <= 1" @click="changeVideoPage(videoPage - 1)">上一页</button>
+                          <span class="page-info">{{ videoPage }} / {{ Math.ceil(videoTotal / 10) }}</span>
+                          <button class="btn btn-small" :disabled="videoPage >= Math.ceil(videoTotal / 10)" @click="changeVideoPage(videoPage + 1)">下一页</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 图片任务 -->
+                    <div v-else-if="expandedTab === 'image'" class="detail-content">
+                      <div v-if="userImageTasks.length === 0" class="empty">暂无图片任务</div>
+                      <div v-else class="task-list">
+                        <div v-for="task in userImageTasks" :key="task.taskId || task._id" class="task-card">
+                          <div class="task-header">
+                            <span class="platform-badge">{{ task.model || 'gemini' }}</span>
+                            <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
+                            <span class="task-time">{{ formatTime(task.createdAt) }}</span>
+                          </div>
+                          <div class="task-prompt">{{ task.prompt }}</div>
+                          <div class="task-meta">
+                            <span v-if="task.aspectRatio">比例: {{ task.aspectRatio }}</span>
+                            <span v-if="task.images && task.images.length">图片数: {{ task.images.length }}</span>
+                          </div>
+                          <!-- 图片预览 -->
+                          <div v-if="task.images && task.images.length > 0" class="image-preview">
+                            <img
+                              v-for="(img, idx) in task.images.slice(0, 4)"
+                              :key="idx"
+                              :src="img.url || `data:${img.mimeType};base64,${img.data}`"
+                              class="preview-thumb"
+                              alt="预览"
+                            />
+                          </div>
+                        </div>
+                        <!-- 图片分页 -->
+                        <div class="pagination" v-if="imageTotal > 10">
+                          <button class="btn btn-small" :disabled="imagePage <= 1" @click="changeImagePage(imagePage - 1)">上一页</button>
+                          <span class="page-info">{{ imagePage }} / {{ Math.ceil(imageTotal / 10) }}</span>
+                          <button class="btn btn-small" :disabled="imagePage >= Math.ceil(imageTotal / 10)" @click="changeImagePage(imagePage + 1)">下一页</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -368,124 +491,6 @@ const fieldLabels: Record<string, string> = {
         <button class="btn btn-small" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">上一页</button>
         <span class="page-info">第 {{ currentPage }} / {{ totalPages }} 页（共 {{ totalUsers }} 条）</span>
         <button class="btn btn-small" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">下一页</button>
-      </div>
-    </div>
-
-    <!-- 展开的用户详情 -->
-    <div v-if="expandedUserId" class="detail-panel">
-      <div class="detail-tabs">
-        <button
-          class="tab-btn"
-          :class="{ active: expandedTab === 'config' }"
-          @click="switchTab('config')"
-        >配置信息</button>
-        <button
-          class="tab-btn"
-          :class="{ active: expandedTab === 'video' }"
-          @click="switchTab('video')"
-        >视频任务</button>
-        <button
-          class="tab-btn"
-          :class="{ active: expandedTab === 'image' }"
-          @click="switchTab('image')"
-        >图片任务</button>
-      </div>
-
-      <div v-if="detailLoading" class="detail-loading">加载中...</div>
-
-      <!-- 配置信息 -->
-      <div v-else-if="expandedTab === 'config'" class="detail-content">
-        <div v-if="userDetail">
-          <div class="user-basic-info">
-            <p><strong>用户ID：</strong>{{ userDetail.user._id }}</p>
-            <p><strong>用户名：</strong>{{ userDetail.user.username }}</p>
-            <p><strong>角色：</strong>{{ roleText(userDetail.user.role) }}</p>
-            <p><strong>视频任务数：</strong>{{ userDetail.videoTaskCount }}</p>
-            <p><strong>图片任务数：</strong>{{ userDetail.imageTaskCount }}</p>
-          </div>
-          <div v-if="userDetail.config" class="config-section">
-            <div class="config-section-header">
-              <h4>API 配置</h4>
-              <button class="btn btn-small" @click="openFullConfig(expandedUserId!)">
-                🔑 查看完整配置
-              </button>
-            </div>
-            <div v-for="(cfg, service) in userDetail.config" :key="service" class="config-item">
-              <div class="config-service">{{ service }}</div>
-              <div class="config-detail">
-                <span class="config-label">Server:</span>
-                <span class="config-value">{{ cfg.server || '-' }}</span>
-              </div>
-              <div class="config-detail">
-                <span class="config-label">Key:</span>
-                <span class="config-value mono">{{ cfg.key || '-' }}</span>
-              </div>
-            </div>
-          </div>
-          <div v-else class="empty">该用户未配置 API</div>
-        </div>
-      </div>
-
-      <!-- 视频任务 -->
-      <div v-else-if="expandedTab === 'video'" class="detail-content">
-        <div v-if="userVideoTasks.length === 0" class="empty">暂无视频任务</div>
-        <div v-else class="task-list">
-          <div v-for="task in userVideoTasks" :key="task.externalTaskId || task._id" class="task-card">
-            <div class="task-header">
-              <span class="platform-badge">{{ task.platform }}</span>
-              <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
-              <span class="task-time">{{ formatTime(task.createdAt) }}</span>
-            </div>
-            <div class="task-prompt">{{ task.prompt }}</div>
-            <div class="task-meta">
-              <span>模型: {{ task.model }}</span>
-              <span v-if="task.video_url">
-                <a :href="task.video_url" target="_blank" class="video-link">查看视频</a>
-              </span>
-            </div>
-          </div>
-          <!-- 视频分页 -->
-          <div class="pagination" v-if="videoTotal > 10">
-            <button class="btn btn-small" :disabled="videoPage <= 1" @click="changeVideoPage(videoPage - 1)">上一页</button>
-            <span class="page-info">{{ videoPage }} / {{ Math.ceil(videoTotal / 10) }}</span>
-            <button class="btn btn-small" :disabled="videoPage >= Math.ceil(videoTotal / 10)" @click="changeVideoPage(videoPage + 1)">下一页</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 图片任务 -->
-      <div v-else-if="expandedTab === 'image'" class="detail-content">
-        <div v-if="userImageTasks.length === 0" class="empty">暂无图片任务</div>
-        <div v-else class="task-list">
-          <div v-for="task in userImageTasks" :key="task.taskId || task._id" class="task-card">
-            <div class="task-header">
-              <span class="platform-badge">{{ task.model || 'gemini' }}</span>
-              <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
-              <span class="task-time">{{ formatTime(task.createdAt) }}</span>
-            </div>
-            <div class="task-prompt">{{ task.prompt }}</div>
-            <div class="task-meta">
-              <span v-if="task.aspectRatio">比例: {{ task.aspectRatio }}</span>
-              <span v-if="task.images && task.images.length">图片数: {{ task.images.length }}</span>
-            </div>
-            <!-- 图片预览 -->
-            <div v-if="task.images && task.images.length > 0" class="image-preview">
-              <img
-                v-for="(img, idx) in task.images.slice(0, 4)"
-                :key="idx"
-                :src="img.url || `data:${img.mimeType};base64,${img.data}`"
-                class="preview-thumb"
-                alt="预览"
-              />
-            </div>
-          </div>
-          <!-- 图片分页 -->
-          <div class="pagination" v-if="imageTotal > 10">
-            <button class="btn btn-small" :disabled="imagePage <= 1" @click="changeImagePage(imagePage - 1)">上一页</button>
-            <span class="page-info">{{ imagePage }} / {{ Math.ceil(imageTotal / 10) }}</span>
-            <button class="btn btn-small" :disabled="imagePage >= Math.ceil(imageTotal / 10)" @click="changeImagePage(imagePage + 1)">下一页</button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -786,13 +791,20 @@ const fieldLabels: Record<string, string> = {
   color: #888;
 }
 
-/* ============ 详情面板 ============ */
+/* ============ 详情面板（内联表格行） ============ */
+.detail-inline-row > .detail-inline-cell {
+  padding: 0;
+  background: #1a1a2e;
+}
 .detail-panel {
   background: #1e1e2e;
   border: 1px solid #333;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 20px;
-  margin-bottom: 24px;
+  margin: 8px 12px;
+}
+tr.row-expanded > td {
+  background: #252540;
 }
 
 .detail-tabs {

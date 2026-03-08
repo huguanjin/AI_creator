@@ -24,6 +24,7 @@ export interface UserApiConfig {
   grok: {
     server: string
     key: string
+    channel: string
   }
   grokImage: {
     server: string
@@ -98,6 +99,7 @@ export class UserConfigService implements OnApplicationBootstrap {
           grok: {
             server: config.grok?.server || '',
             key: config.grok?.key || '',
+            channel: config.grok?.channel || 'aifast',
           },
           grokImage: {
             server: config.grokImage?.server || '',
@@ -118,7 +120,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       sora: { server: '', key: '', characterServer: '', characterKey: '' },
       veo: { server: '', key: '' },
       geminiImage: { server: '', key: '' },
-      grok: { server: '', key: '' },
+      grok: { server: '', key: '', channel: 'aifast' },
       grokImage: { server: '', key: '' },
       doubao: { server: '', key: '' },
     }
@@ -207,6 +209,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       grok: {
         server: config.grok?.server ?? '',
         key: this.maskKey(config.grok?.key ?? ''),
+        channel: config.grok?.channel ?? 'aifast',
       },
       grokImage: {
         server: config.grokImage?.server ?? '',
@@ -248,7 +251,7 @@ export class UserConfigService implements OnApplicationBootstrap {
   async updateUserServiceConfig(
     userId: string,
     service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao',
-    serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string },
+    serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
 
@@ -266,6 +269,7 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'grok') {
       if (serviceConfig.server !== undefined) config.grok.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.grok.key = serviceConfig.key
+      if (serviceConfig.channel !== undefined) config.grok.channel = serviceConfig.channel
     } else if (service === 'grokImage') {
       if (serviceConfig.server !== undefined) config.grokImage.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.grokImage.key = serviceConfig.key

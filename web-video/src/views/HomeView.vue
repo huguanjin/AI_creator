@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { soraApi, veoApi, grokApi, doubaoApi, userConfigApi } from '@/api'
 import { type VideoTask, useVideoStore } from '@/stores/video'
 
@@ -101,10 +101,23 @@ const loadApiConfig = async () => {
       apiConfig.value.sora.characterServer = data.sora.characterServer || ''
       apiConfig.value.sora.characterKey = data.sora.characterKey || ''
     }
+    // Grok 渠道偏好
+    if (data.grok?.channel) {
+      grokForm.value.channel = data.grok.channel as 'aifast' | 'xiaohumini'
+    }
   } catch (e) {
     console.error('加载 API 配置失败', e)
   }
 }
+
+// 渠道变更时自动保存到用户配置
+watch(() => grokForm.value.channel, async (newChannel) => {
+  try {
+    await userConfigApi.updateServiceConfig('grok', { channel: newChannel })
+  } catch (e) {
+    console.error('保存渠道偏好失败', e)
+  }
+})
 
 const saveApiConfig = async () => {
   const svc = platform.value

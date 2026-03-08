@@ -57,4 +57,8 @@ export class UpdateUserServiceConfigDto {
   @IsOptional()
   @IsString()
   characterKey?: string
+
+  @IsOptional()
+  @IsString()
+  channel?: string
 }

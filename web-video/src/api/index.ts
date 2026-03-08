@@ -361,6 +361,7 @@ export interface ServiceConfig {
   key: string
   characterServer?: string
   characterKey?: string
+  channel?: string
 }
 
 export interface EmailConfig {

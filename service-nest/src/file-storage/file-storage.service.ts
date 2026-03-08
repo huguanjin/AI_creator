@@ -147,4 +147,26 @@ export class FileStorageService {
     }
     return null
   }
+
+  /**
+   * 保存上传的 Multer 文件到用户目录
+   * @returns 文件的相对 URL 路径（如 /uploads/images/admin/xxxxx.png）
+   */
+  saveUploadedFile(userId: string, file: Express.Multer.File, filenamePrefix?: string): string {
+    const userDir = this.ensureUserDir(userId)
+
+    const actualMime = this.detectMimeFromBuffer(file.buffer) || file.mimetype
+    const ext = this.getExtension(actualMime)
+    const prefix = filenamePrefix || `${Date.now()}`
+    const finalFilename = `${prefix}_${Math.random().toString(36).slice(2, 8)}.${ext}`
+    const filePath = path.join(userDir, finalFilename)
+
+    fs.writeFileSync(filePath, new Uint8Array(file.buffer))
+
+    const safeId = userId.replace(/[^a-zA-Z0-9_\-]/g, '_')
+    const urlPath = `/uploads/images/${safeId}/${finalFilename}`
+
+    this.logger.log(`💾 Saved uploaded file: ${filePath} (${(file.buffer.length / 1024).toFixed(1)} KB, ${actualMime})`)
+    return urlPath
+  }
 }

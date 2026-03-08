@@ -232,7 +232,7 @@ const createVideo = async () => {
         images: grokForm.value.channel === 'xiaohumini' && grokImageUrls.value.trim()
           ? grokImageUrls.value.split('\n').map(u => u.trim()).filter(Boolean)
           : undefined,
-      }, grokForm.value.channel === 'aifast' ? grokReferenceFiles.value : undefined)
+      }, grokReferenceFiles.value.length > 0 ? grokReferenceFiles.value : undefined)
 
       task = {
         id: response.data.id,
@@ -836,9 +836,9 @@ onMounted(async () => {
             </select>
           </div>
 
-          <!-- aifast 渠道：文件上传参考图 -->
-          <div v-if="grokForm.channel === 'aifast'" class="form-group">
-            <label class="form-label">参考图 (可选)</label>
+          <!-- 参考图上传（两个渠道都支持） -->
+          <div class="form-group">
+            <label class="form-label">参考图 (可选{{ grokForm.channel === 'xiaohumini' ? '，上传后会自动转为URL' : '' }})</label>
             <div class="reference-upload">
               <input
                 ref="grokFileInput"
@@ -876,9 +876,9 @@ onMounted(async () => {
             </div>
           </div>
 
-          <!-- xiaohumini 渠道：图片URL输入 -->
+          <!-- xiaohumini 渠道额外支持：图片URL输入 -->
           <div v-if="grokForm.channel === 'xiaohumini'" class="form-group">
-            <label class="form-label">图片链接 (可选，每行一个URL)</label>
+            <label class="form-label">图片链接 (可选，每行一个URL，也可直接上传图片)</label>
             <textarea
               v-model="grokImageUrls"
               class="form-textarea"

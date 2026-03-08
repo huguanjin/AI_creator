@@ -49,7 +49,12 @@ export class GrokVideoController {
     }
 
     try {
-      const result = await this.grokVideoService.createVideo(createVideoDto, files, userId)
+      // 构建 baseUrl 用于 xiaohumini 渠道将上传文件转为可访问的 URL
+      const protocol = req?.protocol || 'http'
+      const host = req?.get?.('host') || 'localhost:3003'
+      const baseUrl = `${protocol}://${host}`
+
+      const result = await this.grokVideoService.createVideo(createVideoDto, files, userId, baseUrl)
       this.logger.log(`✅ Grok video task created: ${result.id}`)
 
       // 记录任务到数据库

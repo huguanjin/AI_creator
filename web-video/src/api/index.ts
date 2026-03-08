@@ -205,8 +205,8 @@ export const grokApi = {
       formData.append('images', JSON.stringify(params.images))
     }
 
-    // aifast 渠道：上传参考图文件
-    if (params.channel !== 'xiaohumini' && files && files.length > 0) {
+    // 上传参考图文件（两个渠道都支持）
+    if (files && files.length > 0) {
       for (const file of files) {
         formData.append('input_reference', file)
       }

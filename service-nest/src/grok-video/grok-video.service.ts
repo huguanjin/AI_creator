@@ -4,6 +4,7 @@ import * as FormData from 'form-data'
 import { CreateGrokVideoDto } from './dto/create-grok-video.dto'
 import { ConfigService } from '../config/config.service'
 import { UserConfigService } from '../user-config/user-config.service'
+import { FileStorageService } from '../file-storage/file-storage.service'
 
 @Injectable()
 export class GrokVideoService {
@@ -12,6 +13,7 @@ export class GrokVideoService {
   constructor(
     private readonly configService: ConfigService,
     private readonly userConfigService: UserConfigService,
+    private readonly fileStorageService: FileStorageService,
   ) {
     const config = this.configService.getGrokConfig()
     this.logger.log(`🔧 Grok Server: ${config.server}`)
@@ -38,7 +40,7 @@ export class GrokVideoService {
    * aifast 渠道: POST /v1/videos (multipart/form-data)
    * xiaohumini 渠道: POST /v1/video/create (JSON)
    */
-  async createVideo(dto: CreateGrokVideoDto, files?: Express.Multer.File[], userId?: string): Promise<any> {
+  async createVideo(dto: CreateGrokVideoDto, files?: Express.Multer.File[], userId?: string, baseUrl?: string): Promise<any> {
     const config = await this.getUserGrokConfig(userId || 'unknown')
     const channel = dto.channel || 'aifast'
 
@@ -46,7 +48,7 @@ export class GrokVideoService {
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
 
     if (channel === 'xiaohumini') {
-      return this.createVideoXiaohumini(dto, config)
+      return this.createVideoXiaohumini(dto, files, config, userId || 'unknown', baseUrl)
     }
 
     return this.createVideoAifast(dto, files, config)
@@ -102,14 +104,39 @@ export class GrokVideoService {
   /**
    * xiaohumini 渠道创建视频
    * POST {server}/v1/video/create (JSON)
+   * 支持上传本地文件：先保存到本地再生成URL传给API
    */
-  private async createVideoXiaohumini(dto: CreateGrokVideoDto, config: { server: string; key: string }): Promise<any> {
+  private async createVideoXiaohumini(
+    dto: CreateGrokVideoDto,
+    files: Express.Multer.File[] | undefined,
+    config: { server: string; key: string },
+    userId: string,
+    baseUrl?: string,
+  ): Promise<any> {
     let images: string[] = []
+
+    // 优先处理上传的文件：保存到本地并生成可访问的URL
+    if (files && files.length > 0 && baseUrl) {
+      this.logger.log(`🖼️ Saving ${files.length} uploaded files for xiaohumini channel`)
+      const prefix = `grok_${Date.now()}`
+      for (const file of files) {
+        const urlPath = this.fileStorageService.saveUploadedFile(userId, file, prefix)
+        const fullUrl = `${baseUrl}${urlPath}`
+        images.push(fullUrl)
+        this.logger.log(`📎 File saved: ${fullUrl}`)
+      }
+    }
+
+    // 再追加 DTO 中传入的 URL
     if (dto.images) {
       try {
-        images = JSON.parse(dto.images)
+        const parsed = JSON.parse(dto.images)
+        if (Array.isArray(parsed)) {
+          images = [...images, ...parsed]
+        }
       } catch {
-        images = dto.images.split(',').map(s => s.trim()).filter(Boolean)
+        const urls = dto.images.split(',').map(s => s.trim()).filter(Boolean)
+        images = [...images, ...urls]
       }
     }
 

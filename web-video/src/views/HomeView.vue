@@ -44,14 +44,18 @@ const grokForm = ref({
   aspect_ratio: '3:2' as '2:3' | '3:2' | '1:1',
   seconds: 6,
   size: '720P' as '720P' | '1080P',
+  channel: 'aifast' as 'aifast' | 'xiaohumini',
 })
 
 // Grok 模型自定义输入状态
 const grokModelCustom = ref(false)
 
-// Grok 参考图
+// Grok 参考图 (aifast 渠道)
 const grokReferenceFiles = ref<File[]>([])
 const grokFileInput = ref<HTMLInputElement | null>(null)
+
+// Grok 图片URL (xiaohumini 渠道)
+const grokImageUrls = ref('')
 
 // 豆包表单
 const doubaoForm = ref({
@@ -224,7 +228,11 @@ const createVideo = async () => {
         aspect_ratio: grokForm.value.aspect_ratio,
         seconds: grokForm.value.seconds,
         size: grokForm.value.size,
-      }, grokReferenceFiles.value)
+        channel: grokForm.value.channel,
+        images: grokForm.value.channel === 'xiaohumini' && grokImageUrls.value.trim()
+          ? grokImageUrls.value.split('\n').map(u => u.trim()).filter(Boolean)
+          : undefined,
+      }, grokForm.value.channel === 'aifast' ? grokReferenceFiles.value : undefined)
 
       task = {
         id: response.data.id,
@@ -234,6 +242,7 @@ const createVideo = async () => {
         progress: 0,
         created_at: Date.now(),
         platform: 'grok',
+        channel: grokForm.value.channel,
       }
     }
 
@@ -256,10 +265,11 @@ const createVideo = async () => {
     else {
       grokForm.value.prompt = ''
       grokReferenceFiles.value = []
+      grokImageUrls.value = ''
     }
 
     // 开始轮询
-    pollTaskStatus(task.id, task.platform)
+    pollTaskStatus(task.id, task.platform, task.channel)
   }
   catch (error: any) {
     console.error('创建失败', error)
@@ -332,7 +342,7 @@ const handleDoubaoLastFrame = (event: Event) => {
 }
 
 // 轮询任务状态
-const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao') => {
+const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao', taskChannel?: string) => {
   const maxAttempts = 120
   let attempts = 0
 
@@ -348,7 +358,7 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
           ? await veoApi.queryVideo(taskId)
           : taskPlatform === 'doubao'
             ? await doubaoApi.queryVideo(taskId)
-            : await grokApi.queryVideo(taskId)
+            : await grokApi.queryVideo(taskId, taskChannel)
 
       const data = response.data
 
@@ -392,7 +402,7 @@ onMounted(async () => {
   // 恢复未完成任务的轮询
   store.tasks.forEach((task) => {
     if (task.status === 'queued' || task.status === 'processing')
-      pollTaskStatus(task.id, task.platform)
+      pollTaskStatus(task.id, task.platform, task.channel)
   })
 })
 </script>
@@ -748,6 +758,14 @@ onMounted(async () => {
         <!-- Grok 表单 -->
         <template v-else-if="platform === 'grok'">
           <div class="form-group">
+            <label class="form-label">接口渠道</label>
+            <select v-model="grokForm.channel" class="form-select">
+              <option value="aifast">aifast 接口</option>
+              <option value="xiaohumini">xiaohumini站 接口</option>
+            </select>
+          </div>
+
+          <div class="form-group">
             <label class="form-label">模型</label>
             <div class="input-with-toggle">
               <select
@@ -755,15 +773,15 @@ onMounted(async () => {
                 v-model="grokForm.model"
                 class="form-select"
               >
-                <option value="grok-video-3">
-                  grok-video-3 (6秒)
-                </option>
-                <option value="grok-video-3-max">
-                  grok-video-3-max (15秒)
-                </option>
-                <option value="grok-video-pro">
-                  grok-video-pro (10秒)
-                </option>
+                <optgroup label="aifast 接口">
+                  <option value="grok-video-3">grok-video-3 (6秒)</option>
+                  <option value="grok-video-3-max">grok-video-3-max (15秒)</option>
+                  <option value="grok-video-pro">grok-video-pro (10秒)</option>
+                </optgroup>
+                <optgroup label="xiaohumini站 接口">
+                  <option value="grok-video-3-10s">grok-video-3-10s (10秒)</option>
+                  <option value="grok-video-3-15s">grok-video-3-15s (15秒)</option>
+                </optgroup>
               </select>
               <input
                 v-else
@@ -809,7 +827,7 @@ onMounted(async () => {
             </select>
           </div>
 
-          <div class="form-group">
+          <div v-if="grokForm.channel === 'aifast'" class="form-group">
             <label class="form-label">时长</label>
             <select v-model.number="grokForm.seconds" class="form-select">
               <option :value="6">6 秒 (grok-video-3)</option>
@@ -818,8 +836,8 @@ onMounted(async () => {
             </select>
           </div>
 
-          <!-- 参考图上传 -->
-          <div class="form-group">
+          <!-- aifast 渠道：文件上传参考图 -->
+          <div v-if="grokForm.channel === 'aifast'" class="form-group">
             <label class="form-label">参考图 (可选)</label>
             <div class="reference-upload">
               <input
@@ -856,6 +874,17 @@ onMounted(async () => {
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- xiaohumini 渠道：图片URL输入 -->
+          <div v-if="grokForm.channel === 'xiaohumini'" class="form-group">
+            <label class="form-label">图片链接 (可选，每行一个URL)</label>
+            <textarea
+              v-model="grokImageUrls"
+              class="form-textarea"
+              placeholder="输入图片URL，每行一个&#10;例如: https://example.com/image.png"
+              rows="3"
+            />
           </div>
         </template>
 

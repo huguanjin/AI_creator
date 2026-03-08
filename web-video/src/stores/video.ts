@@ -12,6 +12,7 @@ export interface VideoTask {
   thumbnail_url?: string
   created_at: number
   platform: 'sora' | 'veo' | 'grok' | 'doubao'
+  channel?: string
 }
 
 export interface Character {
@@ -36,6 +37,7 @@ function toVideoTask(record: VideoTaskRecord): VideoTask {
     thumbnail_url: record.thumbnail_url,
     created_at: record.createdAt,
     platform: record.platform,
+    channel: record.params?.channel,
   }
 }
 

@@ -185,20 +185,28 @@ export interface CreateGrokVideoParams {
   aspect_ratio?: '2:3' | '3:2' | '1:1'
   seconds?: number
   size?: '720P' | '1080P'
+  channel?: 'aifast' | 'xiaohumini'
+  images?: string[]
 }
 
 export const grokApi = {
   // 创建视频（支持参考图上传）
   createVideo: (params: CreateGrokVideoParams, files?: File[]) => {
     const formData = new FormData()
+    if (params.channel) formData.append('channel', params.channel)
     formData.append('model', params.model)
     formData.append('prompt', params.prompt)
     if (params.aspect_ratio) formData.append('aspect_ratio', params.aspect_ratio)
     if (params.seconds) formData.append('seconds', String(params.seconds))
     if (params.size) formData.append('size', params.size)
 
-    // 添加参考图
-    if (files && files.length > 0) {
+    // xiaohumini 渠道：传图片URL列表
+    if (params.channel === 'xiaohumini' && params.images && params.images.length > 0) {
+      formData.append('images', JSON.stringify(params.images))
+    }
+
+    // aifast 渠道：上传参考图文件
+    if (params.channel !== 'xiaohumini' && files && files.length > 0) {
       for (const file of files) {
         formData.append('input_reference', file)
       }
@@ -212,8 +220,8 @@ export const grokApi = {
   },
 
   // 查询视频状态
-  queryVideo: (id: string) =>
-    api.get(`/v1/grok/query?id=${encodeURIComponent(id)}`),
+  queryVideo: (id: string, channel?: string) =>
+    api.get(`/v1/grok/query?id=${encodeURIComponent(id)}${channel ? `&channel=${encodeURIComponent(channel)}` : ''}`),
 }
 
 // ============ 豆包 API ============

@@ -35,17 +35,30 @@ export class GrokVideoService {
 
   /**
    * 创建 Grok 视频任务（支持参考图）
-   * API: POST /v1/videos (multipart/form-data)
+   * aifast 渠道: POST /v1/videos (multipart/form-data)
+   * xiaohumini 渠道: POST /v1/video/create (JSON)
    */
   async createVideo(dto: CreateGrokVideoDto, files?: Express.Multer.File[], userId?: string): Promise<any> {
     const config = await this.getUserGrokConfig(userId || 'unknown')
+    const channel = dto.channel || 'aifast'
 
-    this.logger.log(`📤 Creating Grok video with model: ${dto.model}`)
+    this.logger.log(`📤 Creating Grok video [${channel}] with model: ${dto.model}`)
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
 
+    if (channel === 'xiaohumini') {
+      return this.createVideoXiaohumini(dto, config)
+    }
+
+    return this.createVideoAifast(dto, files, config)
+  }
+
+  /**
+   * aifast 渠道创建视频
+   * POST {server}/v1/videos (multipart/form-data)
+   */
+  private async createVideoAifast(dto: CreateGrokVideoDto, files: Express.Multer.File[] | undefined, config: { server: string; key: string }): Promise<any> {
     const formData = new FormData()
 
-    // 添加基础参数
     formData.append('model', dto.model || 'grok-video-3')
     formData.append('prompt', dto.prompt)
 
@@ -61,7 +74,6 @@ export class GrokVideoService {
       formData.append('size', dto.size)
     }
 
-    // 添加参考图（如果有）
     if (files && files.length > 0) {
       this.logger.log(`🖼️ Adding ${files.length} reference images`)
       for (const file of files) {
@@ -88,18 +100,93 @@ export class GrokVideoService {
   }
 
   /**
-   * 查询 Grok 视频任务状态
-   * API: GET /v1/videos/{taskId}
+   * xiaohumini 渠道创建视频
+   * POST {server}/v1/video/create (JSON)
    */
-  async queryVideo(taskId: string, userId?: string): Promise<any> {
+  private async createVideoXiaohumini(dto: CreateGrokVideoDto, config: { server: string; key: string }): Promise<any> {
+    let images: string[] = []
+    if (dto.images) {
+      try {
+        images = JSON.parse(dto.images)
+      } catch {
+        images = dto.images.split(',').map(s => s.trim()).filter(Boolean)
+      }
+    }
+
+    const body: any = {
+      model: dto.model || 'grok-video-3',
+      prompt: dto.prompt,
+      aspect_ratio: dto.aspect_ratio || '3:2',
+      size: dto.size || '720P',
+      images,
+    }
+
+    this.logger.log(`📤 xiaohumini request: ${JSON.stringify(body)}`)
+
+    const response = await axios.post(
+      `${config.server}/v1/video/create`,
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 120000,
+      },
+    )
+
+    return response.data
+  }
+
+  /**
+   * 查询 Grok 视频任务状态
+   * aifast 渠道: GET /v1/videos/{taskId}
+   * xiaohumini 渠道: GET /v1/video/query?id={taskId}
+   */
+  async queryVideo(taskId: string, userId?: string, channel?: string): Promise<any> {
     const config = await this.getUserGrokConfig(userId || 'unknown')
+    const ch = channel || 'aifast'
 
-    this.logger.log(`📤 Querying Grok task: ${taskId}`)
+    this.logger.log(`📤 Querying Grok task [${ch}]: ${taskId}`)
 
+    if (ch === 'xiaohumini') {
+      return this.queryVideoXiaohumini(taskId, config)
+    }
+
+    return this.queryVideoAifast(taskId, config)
+  }
+
+  /**
+   * aifast 渠道查询视频
+   * GET {server}/v1/videos/{taskId}
+   */
+  private async queryVideoAifast(taskId: string, config: { server: string; key: string }): Promise<any> {
     const response = await axios.get(
       `${config.server}/v1/videos/${encodeURIComponent(taskId)}`,
       {
         headers: {
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 30000,
+      },
+    )
+
+    return response.data
+  }
+
+  /**
+   * xiaohumini 渠道查询视频
+   * GET {server}/v1/video/query?id={taskId}
+   */
+  private async queryVideoXiaohumini(taskId: string, config: { server: string; key: string }): Promise<any> {
+    const response = await axios.get(
+      `${config.server}/v1/video/query`,
+      {
+        params: { id: taskId },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': `Bearer ${config.key}`,
         },
         timeout: 30000,

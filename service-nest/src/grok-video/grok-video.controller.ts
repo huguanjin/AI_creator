@@ -60,6 +60,7 @@ export class GrokVideoController {
           model: createVideoDto.model || 'grok-video-3',
           prompt: createVideoDto.prompt,
           params: {
+            channel: createVideoDto.channel || 'aifast',
             aspect_ratio: createVideoDto.aspect_ratio,
             seconds: createVideoDto.seconds,
             size: createVideoDto.size,
@@ -99,7 +100,7 @@ export class GrokVideoController {
     const userId = req?.user?.userId || 'unknown'
 
     try {
-      const result = await this.grokVideoService.queryVideo(queryDto.id, userId)
+      const result = await this.grokVideoService.queryVideo(queryDto.id, userId, queryDto.channel)
       this.logger.log(`📊 Grok task status: ${result.status}`)
 
       // 更新数据库中的任务状态

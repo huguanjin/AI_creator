@@ -476,13 +476,15 @@ onMounted(async () => {
           <div v-if="apiConfigVisible" class="api-config-form">
             <div class="api-config-row">
               <label class="api-config-label">API 地址</label>
-              <input
-                v-model="apiConfig[platform].server"
-                type="text"
-                class="form-input"
-                placeholder="https://api.example.com"
-              >
-              <span v-if="hasTrailingSlash(apiConfig[platform].server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+              <div class="api-config-field">
+                <input
+                  v-model="apiConfig[platform].server"
+                  type="text"
+                  class="form-input"
+                  placeholder="https://api.example.com"
+                >
+                <span v-if="hasTrailingSlash(apiConfig[platform].server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+              </div>
             </div>
             <div class="api-config-row">
               <label class="api-config-label">API 密钥</label>
@@ -498,13 +500,15 @@ onMounted(async () => {
               <div class="api-config-divider">角色 API（可选）</div>
               <div class="api-config-row">
                 <label class="api-config-label">角色地址</label>
-                <input
-                  v-model="apiConfig.sora.characterServer"
-                  type="text"
-                  class="form-input"
-                  placeholder="角色 API 地址（留空则使用主地址）"
-                >
-                <span v-if="hasTrailingSlash(apiConfig.sora.characterServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+                <div class="api-config-field">
+                  <input
+                    v-model="apiConfig.sora.characterServer"
+                    type="text"
+                    class="form-input"
+                    placeholder="角色 API 地址（留空则使用主地址）"
+                  >
+                  <span v-if="hasTrailingSlash(apiConfig.sora.characterServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+                </div>
               </div>
               <div class="api-config-row">
                 <label class="api-config-label">角色密钥</label>
@@ -1326,6 +1330,17 @@ onMounted(async () => {
 
 .api-config-row .form-input {
   flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.api-config-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.api-config-field .form-input {
+  width: 100%;
   padding: 6px 10px;
   font-size: 13px;
 }

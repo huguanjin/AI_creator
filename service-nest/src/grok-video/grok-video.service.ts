@@ -125,15 +125,15 @@ export class GrokVideoService {
   ): Promise<any> {
     let images: string[] = []
 
-    // 优先处理上传的文件：保存到本地并生成可访问的URL
-    if (files && files.length > 0 && baseUrl) {
-      this.logger.log(`🖼️ Saving ${files.length} uploaded files for xiaohumini channel`)
-      const prefix = `grok_${Date.now()}`
+    // 将上传的文件转为 base64 Data URI，避免 localhost URL 无法被远端服务器访问
+    if (files && files.length > 0) {
+      this.logger.log(`🖼️ Converting ${files.length} uploaded files to base64 data URIs`)
       for (const file of files) {
-        const urlPath = this.fileStorageService.saveUploadedFile(userId, file, prefix)
-        const fullUrl = `${baseUrl}${urlPath}`
-        images.push(fullUrl)
-        this.logger.log(`📎 File saved: ${fullUrl}`)
+        const base64 = file.buffer.toString('base64')
+        const mimeType = file.mimetype || 'image/png'
+        const dataUri = `data:${mimeType};base64,${base64}`
+        images.push(dataUri)
+        this.logger.log(`📎 File converted: ${file.originalname} (${(file.size / 1024).toFixed(1)} KB) -> data URI`)
       }
     }
 

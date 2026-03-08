@@ -160,7 +160,7 @@ export class GrokVideoService {
 
     this.logger.log(`📤 xiaohumini request: ${JSON.stringify(body)}`)
 
-    return this.curlPost(
+    return this.httpPost(
       `${config.server}/v1/video/create`,
       body,
       config.key,
@@ -210,15 +210,55 @@ export class GrokVideoService {
    */
   private async queryVideoXiaohumini(taskId: string, config: { server: string; key: string }): Promise<any> {
     const url = `${config.server}/v1/video/query?id=${encodeURIComponent(taskId)}`
-    return this.curlGet(url, config.key)
+    return this.httpGet(url, config.key)
   }
 
-  // Windows 用 curl.exe (Schannel TLS)，Linux/Mac 用 curl
-  private readonly curlCmd = process.platform === 'win32' ? 'curl.exe' : 'curl'
+  private readonly isWindows = process.platform === 'win32'
 
   /**
-   * 使用系统 curl 发送 POST 请求
-   * 绕过 Node.js OpenSSL 3.x 与某些服务器的 TLS 不兼容问题
+   * 发送 POST JSON 请求（xiaohumini 渠道）
+   * Windows: 用 curl.exe (Schannel TLS) 绕过 OpenSSL 3.x 不兼容
+   * Linux/Docker: 直接用 axios
+   */
+  private async httpPost(url: string, body: any, apiKey: string): Promise<any> {
+    if (this.isWindows) {
+      return this.curlPost(url, body, apiKey)
+    }
+    const response = await axios.post(url, body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      timeout: 120000,
+      httpsAgent: this.httpsAgent,
+    })
+    this.logger.log(`📥 xiaohumini response: ${JSON.stringify(response.data).substring(0, 500)}`)
+    return response.data
+  }
+
+  /**
+   * 发送 GET 请求（xiaohumini 渠道）
+   */
+  private async httpGet(url: string, apiKey: string): Promise<any> {
+    if (this.isWindows) {
+      return this.curlGet(url, apiKey)
+    }
+    const response = await axios.get(url, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      timeout: 30000,
+      httpsAgent: this.httpsAgent,
+    })
+    this.logger.log(`📥 xiaohumini response: ${JSON.stringify(response.data).substring(0, 500)}`)
+    return response.data
+  }
+
+  /**
+   * Windows: 使用 curl.exe (Schannel TLS) 发送 POST 请求
    */
   private curlPost(url: string, body: any, apiKey: string): any {
     const jsonStr = JSON.stringify(body)
@@ -230,7 +270,7 @@ export class GrokVideoService {
 
     try {
       const result = execSync(
-        `${this.curlCmd} -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
+        `curl.exe -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
         { encoding: 'utf-8', timeout: 130000, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)
@@ -239,7 +279,6 @@ export class GrokVideoService {
       const stderr = err.stderr?.toString() || ''
       const stdout = err.stdout?.toString() || ''
       this.logger.error(`❌ curl POST failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
-      // 如果有 stdout 且可解析为 JSON，仍然返回
       if (stdout.trim()) {
         try { return JSON.parse(stdout) } catch {}
       }
@@ -250,12 +289,12 @@ export class GrokVideoService {
   }
 
   /**
-   * 使用系统 curl 发送 GET 请求
+   * Windows: 使用 curl.exe (Schannel TLS) 发送 GET 请求
    */
   private curlGet(url: string, apiKey: string): any {
     try {
       const result = execSync(
-        `${this.curlCmd} -sk "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" --max-time 30`,
+        `curl.exe -sk "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" --max-time 30`,
         { encoding: 'utf-8', timeout: 35000, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)

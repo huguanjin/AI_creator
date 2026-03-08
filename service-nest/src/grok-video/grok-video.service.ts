@@ -213,8 +213,11 @@ export class GrokVideoService {
     return this.curlGet(url, config.key)
   }
 
+  // Windows 用 curl.exe (Schannel TLS)，Linux/Mac 用 curl
+  private readonly curlCmd = process.platform === 'win32' ? 'curl.exe' : 'curl'
+
   /**
-   * 使用系统 curl.exe (Schannel TLS) 发送 POST 请求
+   * 使用系统 curl 发送 POST 请求
    * 绕过 Node.js OpenSSL 3.x 与某些服务器的 TLS 不兼容问题
    */
   private curlPost(url: string, body: any, apiKey: string): any {
@@ -227,7 +230,7 @@ export class GrokVideoService {
 
     try {
       const result = execSync(
-        `curl.exe -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
+        `${this.curlCmd} -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
         { encoding: 'utf-8', timeout: 130000, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)
@@ -247,12 +250,12 @@ export class GrokVideoService {
   }
 
   /**
-   * 使用系统 curl.exe (Schannel TLS) 发送 GET 请求
+   * 使用系统 curl 发送 GET 请求
    */
   private curlGet(url: string, apiKey: string): any {
     try {
       const result = execSync(
-        `curl.exe -sk "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" --max-time 30`,
+        `${this.curlCmd} -sk "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" --max-time 30`,
         { encoding: 'utf-8', timeout: 35000, stdio: ['pipe', 'pipe', 'pipe'] },
       )
       this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)

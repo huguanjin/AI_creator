@@ -55,6 +55,17 @@ export class GrokVideoController {
       const baseUrl = `${protocol}://${host}`
 
       const result = await this.grokVideoService.createVideo(createVideoDto, files, userId, baseUrl)
+
+      // 检查 API 是否返回了错误
+      if (result.status === 'error' || !result.id) {
+        const errorMsg = result.error || result.message || '创建失败，未返回任务ID'
+        this.logger.error(`❌ Grok API returned error: ${errorMsg}`)
+        throw new HttpException(
+          { status: 'error', message: errorMsg, details: result },
+          HttpStatus.BAD_REQUEST,
+        )
+      }
+
       this.logger.log(`✅ Grok video task created: ${result.id}`)
 
       // 记录任务到数据库
@@ -80,6 +91,10 @@ export class GrokVideoController {
       return result
     }
     catch (error) {
+      // 如果已经是 HttpException（如 API 返回 error 时抛出的），直接重新抛出
+      if (error instanceof HttpException) {
+        throw error
+      }
       this.logger.error(`❌ Failed to create Grok video: ${error.message}`)
       if (error.response?.data) {
         this.logger.error(`📋 API Response: ${JSON.stringify(error.response.data)}`)

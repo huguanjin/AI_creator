@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common'
 import axios from 'axios'
 import * as FormData from 'form-data'
+import * as https from 'https'
+import * as crypto from 'crypto'
+import { execSync } from 'child_process'
 import { CreateGrokVideoDto } from './dto/create-grok-video.dto'
 import { ConfigService } from '../config/config.service'
 import { UserConfigService } from '../user-config/user-config.service'
@@ -9,6 +12,11 @@ import { FileStorageService } from '../file-storage/file-storage.service'
 @Injectable()
 export class GrokVideoService {
   private readonly logger = new Logger(GrokVideoService.name)
+  private readonly httpsAgent = new https.Agent({
+    rejectUnauthorized: false,
+    ciphers: 'DEFAULT@SECLEVEL=0',
+    secureOptions: crypto.constants.SSL_OP_LEGACY_SERVER_CONNECT,
+  })
 
   constructor(
     private readonly configService: ConfigService,
@@ -46,6 +54,7 @@ export class GrokVideoService {
 
     this.logger.log(`📤 Creating Grok video [${channel}] with model: ${dto.model}`)
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
+    this.logger.log(`🔗 Server: ${config.server}`)
 
     if (channel === 'xiaohumini') {
       return this.createVideoXiaohumini(dto, files, config, userId || 'unknown', baseUrl)
@@ -95,6 +104,7 @@ export class GrokVideoService {
           'Authorization': `Bearer ${config.key}`,
         },
         timeout: 120000,
+        httpsAgent: this.httpsAgent,
       },
     )
 
@@ -104,7 +114,7 @@ export class GrokVideoService {
   /**
    * xiaohumini 渠道创建视频
    * POST {server}/v1/video/create (JSON)
-   * 支持上传本地文件：先保存到本地再生成URL传给API
+   * 使用 curl.exe (Schannel TLS) 绕过 Node.js OpenSSL 3.x 与该服务器的 TLS 不兼容问题
    */
   private async createVideoXiaohumini(
     dto: CreateGrokVideoDto,
@@ -150,20 +160,11 @@ export class GrokVideoService {
 
     this.logger.log(`📤 xiaohumini request: ${JSON.stringify(body)}`)
 
-    const response = await axios.post(
+    return this.curlPost(
       `${config.server}/v1/video/create`,
       body,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.key}`,
-        },
-        timeout: 120000,
-      },
+      config.key,
     )
-
-    return response.data
   }
 
   /**
@@ -196,6 +197,7 @@ export class GrokVideoService {
           'Authorization': `Bearer ${config.key}`,
         },
         timeout: 30000,
+        httpsAgent: this.httpsAgent,
       },
     )
 
@@ -207,19 +209,62 @@ export class GrokVideoService {
    * GET {server}/v1/video/query?id={taskId}
    */
   private async queryVideoXiaohumini(taskId: string, config: { server: string; key: string }): Promise<any> {
-    const response = await axios.get(
-      `${config.server}/v1/video/query`,
-      {
-        params: { id: taskId },
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${config.key}`,
-        },
-        timeout: 30000,
-      },
-    )
+    const url = `${config.server}/v1/video/query?id=${encodeURIComponent(taskId)}`
+    return this.curlGet(url, config.key)
+  }
 
-    return response.data
+  /**
+   * 使用系统 curl.exe (Schannel TLS) 发送 POST 请求
+   * 绕过 Node.js OpenSSL 3.x 与某些服务器的 TLS 不兼容问题
+   */
+  private curlPost(url: string, body: any, apiKey: string): any {
+    const jsonStr = JSON.stringify(body)
+    const fs = require('fs')
+    const os = require('os')
+    const path = require('path')
+    const tmpFile = path.join(os.tmpdir(), `grok_req_${Date.now()}.json`)
+    fs.writeFileSync(tmpFile, jsonStr, 'utf-8')
+
+    try {
+      const result = execSync(
+        `curl.exe -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
+        { encoding: 'utf-8', timeout: 130000, stdio: ['pipe', 'pipe', 'pipe'] },
+      )
+      this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)
+      return JSON.parse(result)
+    } catch (err: any) {
+      const stderr = err.stderr?.toString() || ''
+      const stdout = err.stdout?.toString() || ''
+      this.logger.error(`❌ curl POST failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
+      // 如果有 stdout 且可解析为 JSON，仍然返回
+      if (stdout.trim()) {
+        try { return JSON.parse(stdout) } catch {}
+      }
+      throw new Error(`curl POST failed: ${stderr || err.message}`)
+    } finally {
+      try { fs.unlinkSync(tmpFile) } catch {}
+    }
+  }
+
+  /**
+   * 使用系统 curl.exe (Schannel TLS) 发送 GET 请求
+   */
+  private curlGet(url: string, apiKey: string): any {
+    try {
+      const result = execSync(
+        `curl.exe -sk "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" --max-time 30`,
+        { encoding: 'utf-8', timeout: 35000, stdio: ['pipe', 'pipe', 'pipe'] },
+      )
+      this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)
+      return JSON.parse(result)
+    } catch (err: any) {
+      const stderr = err.stderr?.toString() || ''
+      const stdout = err.stdout?.toString() || ''
+      this.logger.error(`❌ curl GET failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
+      if (stdout.trim()) {
+        try { return JSON.parse(stdout) } catch {}
+      }
+      throw new Error(`curl GET failed: ${stderr || err.message}`)
+    }
   }
 }

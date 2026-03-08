@@ -370,7 +370,7 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
         })
         return
       }
-      else if (data.status === 'failed') {
+      else if (data.status === 'failed' || data.status === 'error') {
         store.updateTask(taskId, { status: 'failed' })
         return
       }

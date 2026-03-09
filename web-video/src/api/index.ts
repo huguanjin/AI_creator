@@ -231,16 +231,37 @@ export interface CreateDoubaoVideoParams {
   prompt: string
   size?: string
   seconds?: number
+  channel?: 'aifast' | 'xiaohumini'
+  // xiaohumini 渠道参数
+  resolution?: string
+  camera_fixed?: string
+  watermark?: string
+  seed?: number
+  generate_audio?: string
+  images?: string[]
 }
 
 export const doubaoApi = {
-  // 创建视频（支持首帧/尾帧图片上传）
-  createVideo: (params: CreateDoubaoVideoParams, firstFrame?: File, lastFrame?: File) => {
+  // 创建视频（支持首帧/尾帧/参考图上传）
+  createVideo: (params: CreateDoubaoVideoParams, firstFrame?: File, lastFrame?: File, referenceFiles?: File[]) => {
     const formData = new FormData()
+    if (params.channel) formData.append('channel', params.channel)
     formData.append('model', params.model)
     formData.append('prompt', params.prompt)
     if (params.size) formData.append('size', params.size)
     if (params.seconds) formData.append('seconds', String(params.seconds))
+
+    // xiaohumini 渠道参数
+    if (params.resolution) formData.append('resolution', params.resolution)
+    if (params.camera_fixed) formData.append('camera_fixed', params.camera_fixed)
+    if (params.watermark) formData.append('watermark', params.watermark)
+    if (params.seed !== undefined && params.seed !== null && params.seed !== -1) formData.append('seed', String(params.seed))
+    if (params.generate_audio) formData.append('generate_audio', params.generate_audio)
+
+    // xiaohumini 渠道图片URL列表
+    if (params.channel === 'xiaohumini' && params.images && params.images.length > 0) {
+      formData.append('images', JSON.stringify(params.images))
+    }
 
     // 首帧图片
     if (firstFrame) {
@@ -249,6 +270,12 @@ export const doubaoApi = {
     // 尾帧图片
     if (lastFrame) {
       formData.append('last_frame_image', lastFrame)
+    }
+    // 参考图
+    if (referenceFiles && referenceFiles.length > 0) {
+      for (const file of referenceFiles) {
+        formData.append('reference_images', file)
+      }
     }
 
     return api.post('/v1/doubao/create', formData, {
@@ -259,8 +286,8 @@ export const doubaoApi = {
   },
 
   // 查询视频状态
-  queryVideo: (id: string) =>
-    api.get(`/v1/doubao/query?id=${encodeURIComponent(id)}`),
+  queryVideo: (id: string, channel?: string) =>
+    api.get(`/v1/doubao/query?id=${encodeURIComponent(id)}${channel ? `&channel=${encodeURIComponent(channel)}` : ''}`),
 }
 
 // ============ Gemini Image API ============

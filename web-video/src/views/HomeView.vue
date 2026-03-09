@@ -63,6 +63,13 @@ const doubaoForm = ref({
   prompt: '',
   size: '16:9',
   seconds: 5,
+  channel: 'aifast' as 'aifast' | 'xiaohumini',
+  // xiaohumini 渠道参数
+  resolution: '720p',
+  camera_fixed: 'false',
+  watermark: 'false',
+  seed: -1 as number,
+  generate_audio: 'true',
 })
 
 // 豆包模型自定义输入状态
@@ -74,6 +81,11 @@ const doubaoFirstFrame = ref<File | null>(null)
 const doubaoLastFrame = ref<File | null>(null)
 const doubaoFirstFrameInput = ref<HTMLInputElement | null>(null)
 const doubaoLastFrameInput = ref<HTMLInputElement | null>(null)
+
+// 豆包参考图 (xiaohumini 渠道)
+const doubaoReferenceFiles = ref<File[]>([])
+const doubaoReferenceInput = ref<HTMLInputElement | null>(null)
+const doubaoImageUrls = ref('')
 
 // API 快捷配置
 const apiConfigVisible = ref(false)
@@ -105,6 +117,10 @@ const loadApiConfig = async () => {
     if (data.grok?.channel) {
       grokForm.value.channel = data.grok.channel as 'aifast' | 'xiaohumini'
     }
+    // 豆包渠道偏好
+    if (data.doubao?.channel) {
+      doubaoForm.value.channel = data.doubao.channel as 'aifast' | 'xiaohumini'
+    }
   } catch (e) {
     console.error('加载 API 配置失败', e)
   }
@@ -116,6 +132,15 @@ watch(() => grokForm.value.channel, async (newChannel) => {
     await userConfigApi.updateServiceConfig('grok', { channel: newChannel })
   } catch (e) {
     console.error('保存渠道偏好失败', e)
+  }
+})
+
+// 豆包渠道变更时自动保存到用户配置
+watch(() => doubaoForm.value.channel, async (newChannel) => {
+  try {
+    await userConfigApi.updateServiceConfig('doubao', { channel: newChannel })
+  } catch (e) {
+    console.error('保存豆包渠道偏好失败', e)
   }
 })
 
@@ -221,7 +246,25 @@ const createVideo = async () => {
         prompt: doubaoForm.value.prompt,
         size: doubaoForm.value.size,
         seconds: doubaoForm.value.seconds,
-      }, doubaoFirstFrame.value || undefined, doubaoLastFrame.value || undefined)
+        channel: doubaoForm.value.channel,
+        // xiaohumini 渠道参数
+        ...(doubaoForm.value.channel === 'xiaohumini' ? {
+          resolution: doubaoForm.value.resolution,
+          camera_fixed: doubaoForm.value.camera_fixed,
+          watermark: doubaoForm.value.watermark,
+          seed: doubaoForm.value.seed,
+          generate_audio: doubaoForm.value.generate_audio,
+          images: doubaoImageUrls.value.trim()
+            ? doubaoImageUrls.value.split('\n').map(u => u.trim()).filter(Boolean)
+            : undefined,
+        } : {}),
+      },
+        doubaoFirstFrame.value || undefined,
+        doubaoLastFrame.value || undefined,
+        doubaoForm.value.channel === 'xiaohumini' && doubaoReferenceFiles.value.length > 0
+          ? doubaoReferenceFiles.value
+          : undefined,
+      )
 
       task = {
         id: response.data.id,
@@ -231,6 +274,7 @@ const createVideo = async () => {
         progress: 0,
         created_at: Date.now(),
         platform: 'doubao',
+        channel: doubaoForm.value.channel,
       }
     }
     else {
@@ -274,6 +318,8 @@ const createVideo = async () => {
       doubaoForm.value.prompt = ''
       doubaoFirstFrame.value = null
       doubaoLastFrame.value = null
+      doubaoReferenceFiles.value = []
+      doubaoImageUrls.value = ''
     }
     else {
       grokForm.value.prompt = ''
@@ -354,6 +400,20 @@ const handleDoubaoLastFrame = (event: Event) => {
   input.value = ''
 }
 
+// 豆包参考图处理 (xiaohumini 渠道)
+const handleDoubaoReferenceSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files) {
+    const newFiles = Array.from(input.files)
+    doubaoReferenceFiles.value = [...doubaoReferenceFiles.value, ...newFiles]
+  }
+  input.value = ''
+}
+
+const removeDoubaoReferenceFile = (index: number) => {
+  doubaoReferenceFiles.value.splice(index, 1)
+}
+
 // 轮询任务状态
 const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao', taskChannel?: string) => {
   const maxAttempts = 120
@@ -370,7 +430,7 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
         : taskPlatform === 'veo'
           ? await veoApi.queryVideo(taskId)
           : taskPlatform === 'doubao'
-            ? await doubaoApi.queryVideo(taskId)
+            ? await doubaoApi.queryVideo(taskId, taskChannel)
             : await grokApi.queryVideo(taskId, taskChannel)
 
       const data = response.data
@@ -908,6 +968,14 @@ onMounted(async () => {
         <!-- 豆包 表单 -->
         <template v-else>
           <div class="form-group">
+            <label class="form-label">接口渠道</label>
+            <select v-model="doubaoForm.channel" class="form-select">
+              <option value="aifast">aifast 接口</option>
+              <option value="xiaohumini">xiaohumini站 接口</option>
+            </select>
+          </div>
+
+          <div class="form-group">
             <label class="form-label">模型</label>
             <div class="input-with-toggle">
               <select
@@ -915,11 +983,26 @@ onMounted(async () => {
                 v-model="doubaoForm.model"
                 class="form-select"
               >
-                <optgroup label="🎬 标准版">
-                  <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
-                  <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
-                  <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
-                </optgroup>
+                <template v-if="doubaoForm.channel === 'aifast'">
+                  <optgroup label="🎬 标准版">
+                    <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
+                    <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
+                    <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <optgroup label="🎬 Seedance 1.5 Pro">
+                    <option value="doubao-seedance-1-5-pro-251215">doubao-seedance-1-5-pro-251215 (文生/首帧/首尾帧)</option>
+                  </optgroup>
+                  <optgroup label="⚡ Seedance 1.0 Pro">
+                    <option value="doubao-seedance-1-0-pro-250528">doubao-seedance-1-0-pro-250528 (文生/首帧/首尾帧)</option>
+                    <option value="doubao-seedance-1-0-pro-fast-251015">doubao-seedance-1-0-pro-fast-251015 (文生/首帧)</option>
+                  </optgroup>
+                  <optgroup label="🎨 Seedance 1.0 Lite">
+                    <option value="doubao-seedance-1-0-lite-t2v-250428">doubao-seedance-1-0-lite-t2v-250428 (文生)</option>
+                    <option value="doubao-seedance-1-0-lite-i2v-250428">doubao-seedance-1-0-lite-i2v-250428 (首帧/首尾帧/参考图)</option>
+                  </optgroup>
+                </template>
               </select>
               <input
                 v-else
@@ -948,6 +1031,16 @@ onMounted(async () => {
             />
           </div>
 
+          <!-- xiaohumini 渠道：分辨率 -->
+          <div v-if="doubaoForm.channel === 'xiaohumini'" class="form-group">
+            <label class="form-label">分辨率</label>
+            <select v-model="doubaoForm.resolution" class="form-select">
+              <option value="480p">480p</option>
+              <option value="720p">720p</option>
+              <option value="1080p">1080p（参考图不支持）</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label class="form-label">画面比例</label>
             <select v-model="doubaoForm.size" class="form-select">
@@ -957,7 +1050,9 @@ onMounted(async () => {
               <option value="3:4">竖屏 (3:4)</option>
               <option value="9:16">竖屏 (9:16)</option>
               <option value="21:9">超宽 (21:9)</option>
-              <option value="keep_ratio">保持原始比例</option>
+              <template v-if="doubaoForm.channel === 'aifast'">
+                <option value="keep_ratio">保持原始比例</option>
+              </template>
               <option value="adaptive">自适应</option>
             </select>
           </div>
@@ -970,6 +1065,10 @@ onMounted(async () => {
                 v-model.number="doubaoForm.seconds"
                 class="form-select"
               >
+                <template v-if="doubaoForm.channel === 'xiaohumini'">
+                  <option :value="2">2 秒</option>
+                  <option :value="3">3 秒</option>
+                </template>
                 <option :value="4">4 秒</option>
                 <option :value="5">5 秒</option>
                 <option :value="6">6 秒</option>
@@ -982,9 +1081,9 @@ onMounted(async () => {
                 v-model.number="doubaoForm.seconds"
                 type="number"
                 class="form-input"
-                min="4"
+                :min="doubaoForm.channel === 'xiaohumini' ? 2 : 4"
                 max="12"
-                placeholder="输入秒数 (4-12)"
+                :placeholder="doubaoForm.channel === 'xiaohumini' ? '输入秒数 (2-12)' : '输入秒数 (4-12)'"
               >
               <button
                 type="button"
@@ -996,6 +1095,33 @@ onMounted(async () => {
               </button>
             </div>
           </div>
+
+          <!-- xiaohumini 渠道：额外参数 -->
+          <template v-if="doubaoForm.channel === 'xiaohumini'">
+            <div class="form-group">
+              <label class="form-label">固定摄像头</label>
+              <select v-model="doubaoForm.camera_fixed" class="form-select">
+                <option value="false">否</option>
+                <option value="true">是（参考图不支持）</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">水印</label>
+              <select v-model="doubaoForm.watermark" class="form-select">
+                <option value="false">无水印</option>
+                <option value="true">有水印</option>
+              </select>
+            </div>
+
+            <div v-if="doubaoForm.model.includes('1-5-pro')" class="form-group">
+              <label class="form-label">生成音频</label>
+              <select v-model="doubaoForm.generate_audio" class="form-select">
+                <option value="true">是（仅 Seedance 1.5 Pro）</option>
+                <option value="false">否</option>
+              </select>
+            </div>
+          </template>
 
           <!-- 首帧图上传 -->
           <div class="form-group">
@@ -1046,6 +1172,64 @@ onMounted(async () => {
               </span>
             </div>
           </div>
+
+          <!-- xiaohumini 渠道：参考图上传 -->
+          <template v-if="doubaoForm.channel === 'xiaohumini'">
+            <div class="form-group">
+              <label class="form-label">参考图 (可选，最多4张，仅 lite-i2v 模型)</label>
+              <div class="reference-upload">
+                <input
+                  ref="doubaoReferenceInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style="display: none"
+                  @change="handleDoubaoReferenceSelect"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  @click="doubaoReferenceInput?.click()"
+                >
+                  📷 选择参考图
+                </button>
+                <span v-if="doubaoReferenceFiles.length > 0" class="file-count">
+                  已选 {{ doubaoReferenceFiles.length }} 张
+                  <button type="button" class="btn-clear" @click="doubaoReferenceFiles = []">清除</button>
+                </span>
+              </div>
+
+              <!-- 已选参考图预览 -->
+              <div v-if="doubaoReferenceFiles.length > 0" class="reference-preview">
+                <div
+                  v-for="(file, index) in doubaoReferenceFiles"
+                  :key="index"
+                  class="preview-item"
+                >
+                  <img :src="getFilePreviewUrl(file)" :alt="file.name">
+                  <span class="preview-name">{{ file.name }}</span>
+                  <button
+                    type="button"
+                    class="preview-remove"
+                    @click="removeDoubaoReferenceFile(index)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 图片链接输入 -->
+            <div class="form-group">
+              <label class="form-label">图片链接 (可选，每行一个URL，也可直接上传)</label>
+              <textarea
+                v-model="doubaoImageUrls"
+                class="form-textarea"
+                placeholder="输入图片URL，每行一个&#10;例如: https://example.com/image.png"
+                rows="3"
+              />
+            </div>
+          </template>
         </template>
 
         <button

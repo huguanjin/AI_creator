@@ -33,6 +33,7 @@ export interface UserApiConfig {
   doubao: {
     server: string
     key: string
+    channel: string
   }
 }
 
@@ -108,6 +109,7 @@ export class UserConfigService implements OnApplicationBootstrap {
           doubao: {
             server: config.doubao?.server || '',
             key: config.doubao?.key || '',
+            channel: config.doubao?.channel || 'aifast',
           },
         }
       }
@@ -122,7 +124,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { server: '', key: '' },
       grok: { server: '', key: '', channel: 'aifast' },
       grokImage: { server: '', key: '' },
-      doubao: { server: '', key: '' },
+      doubao: { server: '', key: '', channel: 'aifast' },
     }
   }
 
@@ -218,6 +220,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       doubao: {
         server: config.doubao?.server ?? '',
         key: this.maskKey(config.doubao?.key ?? ''),
+        channel: config.doubao?.channel ?? 'aifast',
       },
     }
   }
@@ -276,6 +279,7 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'doubao') {
       if (serviceConfig.server !== undefined) config.doubao.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.doubao.key = serviceConfig.key
+      if (serviceConfig.channel !== undefined) config.doubao.channel = serviceConfig.channel
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')

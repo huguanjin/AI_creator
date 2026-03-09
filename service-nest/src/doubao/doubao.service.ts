@@ -34,20 +34,38 @@ export class DoubaoService {
   }
 
   /**
-   * 创建豆包视频任务（multipart/form-data，支持首帧/尾帧图片）
-   * 上游 API: POST /v1/videos
+   * 创建豆包视频任务（支持 aifast 和 xiaohumini 渠道）
    */
   async createVideo(
     dto: CreateDoubaoVideoDto,
     firstFrameFile?: Express.Multer.File,
     lastFrameFile?: Express.Multer.File,
+    referenceFiles?: Express.Multer.File[],
     userId?: string,
   ): Promise<any> {
     const config = await this.getUserDoubaoConfig(userId || 'unknown')
+    const channel = dto.channel || 'aifast'
 
-    this.logger.log(`📤 Creating Doubao video with model: ${dto.model}`)
+    this.logger.log(`📤 Creating Doubao video [${channel}] with model: ${dto.model}`)
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
 
+    if (channel === 'xiaohumini') {
+      return this.createVideoXiaohumini(dto, config, firstFrameFile, lastFrameFile, referenceFiles)
+    }
+
+    return this.createVideoAifast(dto, config, firstFrameFile, lastFrameFile)
+  }
+
+  /**
+   * aifast 渠道创建视频
+   * POST {server}/v1/videos (multipart/form-data)
+   */
+  private async createVideoAifast(
+    dto: CreateDoubaoVideoDto,
+    config: { server: string; key: string },
+    firstFrameFile?: Express.Multer.File,
+    lastFrameFile?: Express.Multer.File,
+  ): Promise<any> {
     const formData = new FormData()
 
     // 必填字段
@@ -98,14 +116,147 @@ export class DoubaoService {
   }
 
   /**
-   * 查询豆包视频任务状态
-   * 上游 API: GET /v1/videos/{task_id}
+   * xiaohumini 渠道创建视频
+   * POST {server}/volc/v1/contents/generations/tasks (JSON)
+   * 参数通过 -- 形式追加到提示词后面
    */
-  async queryVideo(taskId: string, userId?: string): Promise<any> {
+  private async createVideoXiaohumini(
+    dto: CreateDoubaoVideoDto,
+    config: { server: string; key: string },
+    firstFrameFile?: Express.Multer.File,
+    lastFrameFile?: Express.Multer.File,
+    referenceFiles?: Express.Multer.File[],
+  ): Promise<any> {
+    // 构建 -- 参数字符串
+    const params: string[] = []
+    if (dto.resolution) params.push(`--resolution ${dto.resolution}`)
+    if (dto.size) params.push(`--ratio ${dto.size}`)
+    if (dto.seconds) params.push(`--duration ${dto.seconds}`)
+    if (dto.camera_fixed) params.push(`--camera_fixed ${dto.camera_fixed}`)
+    if (dto.watermark) params.push(`--watermark ${dto.watermark}`)
+    if (dto.seed !== undefined && dto.seed !== null && dto.seed !== -1) params.push(`--seed ${dto.seed}`)
+
+    const fullPrompt = params.length > 0
+      ? `${dto.prompt} ${params.join(' ')}`
+      : dto.prompt
+
+    const content: any[] = [
+      { type: 'text', text: fullPrompt },
+    ]
+
+    // 添加首帧图片
+    if (firstFrameFile) {
+      this.logger.log(`🖼️ Adding first frame image (base64): ${firstFrameFile.originalname}`)
+      const base64 = firstFrameFile.buffer.toString('base64')
+      const mimeType = firstFrameFile.mimetype || 'image/png'
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:${mimeType};base64,${base64}` },
+        role: 'first_frame',
+      })
+    }
+
+    // 添加尾帧图片
+    if (lastFrameFile) {
+      this.logger.log(`🖼️ Adding last frame image (base64): ${lastFrameFile.originalname}`)
+      const base64 = lastFrameFile.buffer.toString('base64')
+      const mimeType = lastFrameFile.mimetype || 'image/png'
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:${mimeType};base64,${base64}` },
+        role: 'last_frame',
+      })
+    }
+
+    // 添加参考图（上传文件转 base64）
+    if (referenceFiles && referenceFiles.length > 0) {
+      this.logger.log(`🖼️ Adding ${referenceFiles.length} reference images (base64)`)
+      for (const file of referenceFiles) {
+        const base64 = file.buffer.toString('base64')
+        const mimeType = file.mimetype || 'image/png'
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:${mimeType};base64,${base64}` },
+          role: 'reference_image',
+        })
+      }
+    }
+
+    // 添加参考图（URL）
+    if (dto.images) {
+      try {
+        const parsed = JSON.parse(dto.images)
+        if (Array.isArray(parsed)) {
+          for (const url of parsed) {
+            content.push({
+              type: 'image_url',
+              image_url: { url },
+              role: 'reference_image',
+            })
+          }
+        }
+      } catch {
+        const urls = dto.images.split(',').map(s => s.trim()).filter(Boolean)
+        for (const url of urls) {
+          content.push({
+            type: 'image_url',
+            image_url: { url },
+            role: 'reference_image',
+          })
+        }
+      }
+    }
+
+    const body: any = {
+      model: dto.model,
+      content,
+    }
+
+    // generate_audio 仅 Seedance 1.5 pro 支持
+    if (dto.generate_audio !== undefined && dto.generate_audio !== '') {
+      body.generate_audio = dto.generate_audio === 'true'
+    }
+
+    this.logger.log(`📤 Sending xiaohumini create request to: ${config.server}/volc/v1/contents/generations/tasks`)
+    this.logger.log(`📦 Request body: ${JSON.stringify(body).slice(0, 500)}`)
+
+    const response = await axios.post(
+      `${config.server}/volc/v1/contents/generations/tasks`,
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 120000,
+      },
+    )
+
+    return response.data
+  }
+
+  /**
+   * 查询豆包视频任务状态（支持 aifast 和 xiaohumini 渠道）
+   */
+  async queryVideo(taskId: string, userId?: string, channel?: string): Promise<any> {
     const config = await this.getUserDoubaoConfig(userId || 'unknown')
+    const ch = channel || 'aifast'
 
-    this.logger.log(`📤 Querying Doubao task: ${taskId}`)
+    this.logger.log(`📤 Querying Doubao task [${ch}]: ${taskId}`)
 
+    if (ch === 'xiaohumini') {
+      return this.queryVideoXiaohumini(taskId, config)
+    }
+
+    return this.queryVideoAifast(taskId, config)
+  }
+
+  /**
+   * aifast 渠道查询视频
+   * GET {server}/v1/videos/{task_id}
+   */
+  private async queryVideoAifast(taskId: string, config: { server: string; key: string }): Promise<any> {
     const response = await axios.get(
       `${config.server}/v1/videos/${encodeURIComponent(taskId)}`,
       {
@@ -117,5 +268,48 @@ export class DoubaoService {
     )
 
     return response.data
+  }
+
+  /**
+   * xiaohumini 渠道查询视频
+   * GET {server}/volc/v1/contents/generations/tasks?filter.task_ids=xxx
+   * 响应格式 { total, items: [{ id, model, status, content: { video_url }, ... }] }
+   */
+  private async queryVideoXiaohumini(taskId: string, config: { server: string; key: string }): Promise<any> {
+    const response = await axios.get(
+      `${config.server}/volc/v1/contents/generations/tasks`,
+      {
+        params: {
+          'filter.task_ids': taskId,
+        },
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 30000,
+      },
+    )
+
+    const data = response.data
+
+    // 标准化响应格式，与 aifast 渠道统一
+    if (data.items && data.items.length > 0) {
+      const item = data.items[0]
+      let status = item.status
+      if (status === 'succeeded') status = 'completed'
+      else if (status === 'submitted' || status === 'running') status = 'processing'
+
+      return {
+        id: item.id,
+        status,
+        video_url: item.content?.video_url,
+        model: item.model,
+        usage: item.usage,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+      }
+    }
+
+    return data
   }
 }

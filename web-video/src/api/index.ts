@@ -389,6 +389,8 @@ export interface ServiceConfig {
   characterServer?: string
   characterKey?: string
   channel?: string
+  xiaohuminiServer?: string
+  xiaohuminiKey?: string
 }
 
 export interface EmailConfig {
@@ -635,6 +637,62 @@ export const feedbackApi = {
   // 管理员获取反馈统计
   getStats: () =>
     api.get<{ status: string; data: FeedbackStats }>('/v1/feedback/admin/stats'),
+}
+
+// ============ Announcement API ============
+
+export interface AnnouncementItem {
+  _id: string
+  content: string
+  publishDate: string
+  type: string
+  description: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+}
+
+export const announcementApi = {
+  // 获取最新公告（公开）
+  getLatest: (limit?: number) =>
+    api.get<{ status: string; data: AnnouncementItem[] }>(
+      '/v1/announcements/latest',
+      { params: { limit } },
+    ),
+
+  // 管理员获取公告列表
+  getList: (params?: { page?: number; limit?: number }) =>
+    api.get<{ status: string; data: AnnouncementItem[]; total: number; page: number; limit: number }>(
+      '/v1/announcements',
+      { params },
+    ),
+
+  // 管理员创建公告
+  create: (data: { content: string; publishDate?: string; type?: string; description?: string }) =>
+    api.post<{ status: string; data: AnnouncementItem }>(
+      '/v1/announcements',
+      data,
+    ),
+
+  // 管理员更新公告
+  update: (id: string, data: { content?: string; publishDate?: string; type?: string; description?: string }) =>
+    api.put<{ status: string; message: string }>(
+      `/v1/announcements/${encodeURIComponent(id)}`,
+      data,
+    ),
+
+  // 管理员删除公告
+  delete: (id: string) =>
+    api.delete<{ status: string; message: string }>(
+      `/v1/announcements/${encodeURIComponent(id)}`,
+    ),
+
+  // 管理员批量删除公告
+  deleteMany: (ids: string[]) =>
+    api.delete<{ status: string; message: string }>(
+      '/v1/announcements',
+      { data: { ids } },
+    ),
 }
 
 export default api

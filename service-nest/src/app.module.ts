@@ -14,6 +14,7 @@ import { FileStorageModule } from './file-storage/file-storage.module'
 import { AdminModule } from './admin/admin.module'
 import { FeedbackModule } from './feedback/feedback.module'
 import { EmailModule } from './email/email.module'
+import { AnnouncementModule } from './announcement/announcement.module'
 
 @Module({
   imports: [
@@ -50,6 +51,8 @@ import { EmailModule } from './email/email.module'
     AdminModule,
     // 问题反馈模块
     FeedbackModule,
+    // 系统公告模块
+    AnnouncementModule,
   ],
 })
 export class AppModule {}

@@ -24,13 +24,27 @@ export class DoubaoService {
   private async getUserDoubaoConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
-      if (userConfig.doubao?.server) {
+      if (userConfig.doubao?.server || userConfig.doubao?.xiaohuminiServer) {
         return userConfig.doubao
       }
     } catch (e) {
       this.logger.warn(`⚠️ Failed to load user config for ${userId}, using global`)
     }
     return this.configService.getDoubaoConfig()
+  }
+
+  /**
+   * 根据渠道获取对应的 server/key
+   * xiaohumini 渠道优先使用 xiaohuminiServer/xiaohuminiKey，回退到 server/key
+   */
+  private getChannelConfig(config: any, channel: string): { server: string; key: string } {
+    if (channel === 'xiaohumini') {
+      return {
+        server: config.xiaohuminiServer || config.server,
+        key: config.xiaohuminiKey || config.key,
+      }
+    }
+    return { server: config.server, key: config.key }
   }
 
   /**
@@ -43,11 +57,13 @@ export class DoubaoService {
     referenceFiles?: Express.Multer.File[],
     userId?: string,
   ): Promise<any> {
-    const config = await this.getUserDoubaoConfig(userId || 'unknown')
+    const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
     const channel = dto.channel || 'aifast'
+    const config = this.getChannelConfig(fullConfig, channel)
 
     this.logger.log(`📤 Creating Doubao video [${channel}] with model: ${dto.model}`)
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
+    this.logger.log(`🔗 Server: ${config.server}`)
 
     if (channel === 'xiaohumini') {
       return this.createVideoXiaohumini(dto, config, firstFrameFile, lastFrameFile, referenceFiles)
@@ -240,8 +256,9 @@ export class DoubaoService {
    * 查询豆包视频任务状态（支持 aifast 和 xiaohumini 渠道）
    */
   async queryVideo(taskId: string, userId?: string, channel?: string): Promise<any> {
-    const config = await this.getUserDoubaoConfig(userId || 'unknown')
+    const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
     const ch = channel || 'aifast'
+    const config = this.getChannelConfig(fullConfig, ch)
 
     this.logger.log(`📤 Querying Doubao task [${ch}]: ${taskId}`)
 

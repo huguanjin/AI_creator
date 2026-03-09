@@ -34,6 +34,8 @@ export interface UserApiConfig {
     server: string
     key: string
     channel: string
+    xiaohuminiServer: string
+    xiaohuminiKey: string
   }
 }
 
@@ -110,6 +112,8 @@ export class UserConfigService implements OnApplicationBootstrap {
             server: config.doubao?.server || '',
             key: config.doubao?.key || '',
             channel: config.doubao?.channel || 'aifast',
+            xiaohuminiServer: config.doubao?.xiaohuminiServer || '',
+            xiaohuminiKey: config.doubao?.xiaohuminiKey || '',
           },
         }
       }
@@ -124,7 +128,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { server: '', key: '' },
       grok: { server: '', key: '', channel: 'aifast' },
       grokImage: { server: '', key: '' },
-      doubao: { server: '', key: '', channel: 'aifast' },
+      doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
     }
   }
 
@@ -221,6 +225,8 @@ export class UserConfigService implements OnApplicationBootstrap {
         server: config.doubao?.server ?? '',
         key: this.maskKey(config.doubao?.key ?? ''),
         channel: config.doubao?.channel ?? 'aifast',
+        xiaohuminiServer: config.doubao?.xiaohuminiServer ?? '',
+        xiaohuminiKey: this.maskKey(config.doubao?.xiaohuminiKey ?? ''),
       },
     }
   }
@@ -254,7 +260,7 @@ export class UserConfigService implements OnApplicationBootstrap {
   async updateUserServiceConfig(
     userId: string,
     service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao',
-    serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string },
+    serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string; xiaohuminiServer?: string; xiaohuminiKey?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
 
@@ -280,6 +286,8 @@ export class UserConfigService implements OnApplicationBootstrap {
       if (serviceConfig.server !== undefined) config.doubao.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.doubao.key = serviceConfig.key
       if (serviceConfig.channel !== undefined) config.doubao.channel = serviceConfig.channel
+      if (serviceConfig.xiaohuminiServer !== undefined) config.doubao.xiaohuminiServer = serviceConfig.xiaohuminiServer
+      if (serviceConfig.xiaohuminiKey !== undefined) config.doubao.xiaohuminiKey = serviceConfig.xiaohuminiKey
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')

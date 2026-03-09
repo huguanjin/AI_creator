@@ -79,6 +79,12 @@ const router = createRouter({
       name: 'admin-feedback',
       component: () => import('@/views/AdminFeedbackView.vue'),
       meta: { requiresAdmin: true },
+    },
+    {
+      path: '/admin/announcements',
+      name: 'admin-announcements',
+      component: () => import('@/views/AdminAnnouncementView.vue'),
+      meta: { requiresAdmin: true },
     }
   ]
 })

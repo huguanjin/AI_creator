@@ -59,7 +59,7 @@ const editForm = ref<{
   geminiImage: { server: '', key: '' },
   grok: { server: '', key: '' },
   grokImage: { server: '', key: '' },
-  doubao: { server: '', key: '' },
+  doubao: { server: '', key: '', xiaohuminiServer: '', xiaohuminiKey: '' },
 })
 
 // 显示消息
@@ -695,25 +695,45 @@ onMounted(() => {
         
         <div v-if="!editMode.doubao" class="config-display">
           <div class="config-item">
-            <label>API 地址</label>
+            <label>aifast API 地址</label>
             <span class="value">{{ config.doubao?.server || '(未设置)' }}</span>
             <span v-if="hasTrailingSlash(config.doubao?.server || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
           </div>
           <div class="config-item">
-            <label>API Key</label>
+            <label>aifast API Key</label>
             <span class="value masked">{{ config.doubao?.key || '(未设置)' }}</span>
+          </div>
+          <div class="config-item">
+            <label>xiaohumini API 地址</label>
+            <span class="value">{{ config.doubao?.xiaohuminiServer || '(未设置，将回退到 aifast 地址)' }}</span>
+            <span v-if="hasTrailingSlash(config.doubao?.xiaohuminiServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
+          </div>
+          <div class="config-item">
+            <label>xiaohumini API Key</label>
+            <span class="value masked">{{ config.doubao?.xiaohuminiKey || '(未设置，将回退到 aifast Key)' }}</span>
           </div>
         </div>
 
         <div v-else class="config-edit">
+          <p class="edit-hint" style="margin: 0 0 8px; font-size: 12px; color: #999;">aifast 渠道配置</p>
           <div class="form-group">
-            <label>API 地址</label>
+            <label>aifast API 地址</label>
             <input v-model="editForm.doubao.server" type="text" placeholder="https://..." />
             <span v-if="hasTrailingSlash(editForm.doubao.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
           </div>
           <div class="form-group">
-            <label>API Key</label>
+            <label>aifast API Key</label>
             <input v-model="editForm.doubao.key" type="text" placeholder="sk-..." />
+          </div>
+          <p class="edit-hint" style="margin: 12px 0 8px; font-size: 12px; color: #999;">xiaohumini 渠道配置（留空则回退到 aifast 配置）</p>
+          <div class="form-group">
+            <label>xiaohumini API 地址</label>
+            <input v-model="editForm.doubao.xiaohuminiServer" type="text" placeholder="https://...（留空回退 aifast 地址）" />
+            <span v-if="hasTrailingSlash(editForm.doubao.xiaohuminiServer || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+          </div>
+          <div class="form-group">
+            <label>xiaohumini API Key</label>
+            <input v-model="editForm.doubao.xiaohuminiKey" type="text" placeholder="sk-...（留空回退 aifast Key）" />
           </div>
           <div class="button-group">
             <button class="save-btn" :disabled="isSaving" @click="saveConfig('doubao')">

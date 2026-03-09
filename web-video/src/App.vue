@@ -4,17 +4,42 @@
       <div class="header-content">
         <div class="logo">🎬 AI 创作中心</div>
         <nav class="nav">
-          <router-link to="/" class="nav-link">视频生成</router-link>
-          <router-link to="/image" class="nav-link">图片创作</router-link>
-          <router-link to="/tasks" class="nav-link">任务列表</router-link>
-          <router-link to="/characters" class="nav-link">角色管理</router-link>
-          <router-link to="/query" class="nav-link">任务查询</router-link>
+          <router-link to="/" class="nav-link">🎬 视频生成</router-link>
+          <router-link to="/image" class="nav-link">🎨 图片创作</router-link>
+
+          <!-- 任务中心下拉 -->
+          <div class="nav-dropdown">
+            <span class="nav-link nav-dropdown-trigger">📋 任务中心 <span class="drop-arrow">▾</span></span>
+            <div class="nav-dropdown-menu">
+              <router-link to="/tasks" class="dropdown-item">📄 任务列表</router-link>
+              <router-link to="/query" class="dropdown-item">🔍 任务查询</router-link>
+              <router-link to="/characters" class="dropdown-item">👤 角色管理</router-link>
+            </div>
+          </div>
+
           <router-link to="/feedback" class="nav-link">📮 问题反馈</router-link>
           <router-link to="/config" class="nav-link">⚙️ 配置</router-link>
-          <a v-if="tutorialUrl" :href="tutorialUrl" target="_blank" rel="noopener noreferrer" class="nav-link tutorial-link">📖 使用教程</a>
-          <router-link v-if="authStore.isAdmin" to="/admin" class="nav-link admin-link">👥 用户管理</router-link>
-          <router-link v-if="authStore.isAdmin" to="/admin/feedback" class="nav-link admin-link">📝 反馈管理</router-link>
+          <a v-if="tutorialUrl" :href="tutorialUrl" target="_blank" rel="noopener noreferrer" class="nav-link tutorial-link">📖 教程</a>
+
+          <!-- 管理后台下拉（仅管理员） -->
+          <div v-if="authStore.isAdmin" class="nav-dropdown">
+            <span class="nav-link nav-dropdown-trigger admin-link">🛠️ 管理后台 <span class="drop-arrow">▾</span></span>
+            <div class="nav-dropdown-menu">
+              <router-link to="/admin" class="dropdown-item">👥 用户管理</router-link>
+              <router-link to="/admin/feedback" class="dropdown-item">📝 反馈管理</router-link>
+              <router-link to="/admin/announcements" class="dropdown-item">📢 公告管理</router-link>
+            </div>
+          </div>
         </nav>
+
+        <!-- 公告铃铛 -->
+        <div class="bell-area" @click.stop="toggleAnnouncementPanel">
+          <div class="bell-icon">
+            🔔
+            <span v-if="unreadCount > 0" class="bell-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+          </div>
+        </div>
+
         <div class="user-area">
           <!-- 用户头像按钮 -->
           <div class="avatar-wrapper" @click.stop="showUserPanel = !showUserPanel">
@@ -78,6 +103,32 @@
         </div>
       </div>
     </header>
+
+    <!-- 公告弹出面板 -->
+    <div v-if="showAnnouncementPanel && latestAnnouncements.length > 0" class="ann-panel-overlay" @click.self="closeAnnouncementPanel">
+      <div class="ann-panel" @click.stop>
+        <div class="ann-panel-header">
+          <h3>系统公告</h3>
+          <div class="ann-panel-tabs">
+            <button class="ann-tab" :class="{ active: annTab === 'announcement' }" @click="annTab = 'announcement'">📢 系统公告</button>
+          </div>
+          <button class="ann-panel-close" @click="closeAnnouncementPanel">&times;</button>
+        </div>
+        <div class="ann-panel-body">
+          <div v-if="latestAnnouncements.length === 0" class="ann-empty">暂无公告</div>
+          <div v-else class="ann-list">
+            <div v-for="a in latestAnnouncements" :key="a._id" class="ann-list-item">
+              <div class="ann-dot"></div>
+              <div class="ann-item-body">
+                <div class="ann-item-content">{{ a.content }}</div>
+                <div class="ann-item-time">{{ relativeTime(a.publishDate) }} {{ formatDate(a.publishDate) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main class="container">
       <router-view />
     </main>
@@ -105,7 +156,7 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { configApi } from '@/api'
+import { configApi, announcementApi, type AnnouncementItem } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,6 +173,72 @@ const qrcodeUrl = ref('')
 
 // 页脚内容
 const footerContent = ref('')
+
+// 公告
+const latestAnnouncements = ref<AnnouncementItem[]>([])
+const showAnnouncementPanel = ref(false)
+const annTab = ref('announcement')
+
+/** 获取已读公告 ID 列表 */
+const getReadIds = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem('read_announcement_ids') || '[]')
+  } catch { return [] }
+}
+
+/** 标记公告为已读 */
+const markAllRead = () => {
+  const ids = latestAnnouncements.value.map(a => a._id)
+  const existing = getReadIds()
+  const merged = Array.from(new Set([...existing, ...ids]))
+  // 最多保留 200 条已读记录，避免 localStorage 膨胀
+  localStorage.setItem('read_announcement_ids', JSON.stringify(merged.slice(-200)))
+}
+
+const unreadCount = computed(() => {
+  const readIds = getReadIds()
+  return latestAnnouncements.value.filter(a => !readIds.includes(a._id)).length
+})
+
+const loadAnnouncements = async () => {
+  try {
+    const res = await announcementApi.getLatest(10)
+    latestAnnouncements.value = res.data.data || []
+    // 如果有未读公告，自动弹出
+    if (unreadCount.value > 0) {
+      showAnnouncementPanel.value = true
+    }
+  } catch {}
+}
+
+const toggleAnnouncementPanel = () => {
+  showAnnouncementPanel.value = !showAnnouncementPanel.value
+}
+
+const closeAnnouncementPanel = () => {
+  markAllRead()
+  showAnnouncementPanel.value = false
+}
+
+/** 相对时间 */
+const relativeTime = (dateStr: string) => {
+  if (!dateStr) return ''
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}天前`
+  const months = Math.floor(days / 30)
+  return `${months}个月前`
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 
 const loadTutorialUrl = async () => {
   try {
@@ -193,10 +310,14 @@ const handleLogout = () => {
 }
 
 // 点击页面其他区域关闭面板
-const closePanel = () => { showUserPanel.value = false; resetPwdForm() }
+const closePanel = () => {
+  showUserPanel.value = false
+  resetPwdForm()
+}
 onMounted(() => {
   document.addEventListener('click', closePanel)
   loadTutorialUrl()
+  loadAnnouncements()
 })
 onUnmounted(() => document.removeEventListener('click', closePanel))
 </script>
@@ -551,5 +672,186 @@ onUnmounted(() => document.removeEventListener('click', closePanel))
   text-align: center;
   color: #666;
   font-size: 13px;
+}
+
+/* ===== 铃铛图标 ===== */
+.bell-area {
+  position: relative;
+  cursor: pointer;
+  padding: 6px;
+  margin-left: 8px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.bell-area:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.bell-icon {
+  font-size: 20px;
+  position: relative;
+  line-height: 1;
+}
+
+.bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 0 4px;
+}
+
+/* ===== 公告面板 ===== */
+.ann-panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.ann-panel {
+  width: 440px;
+  max-width: 90vw;
+  max-height: 80vh;
+  margin-top: 60px;
+  margin-right: 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: annSlideIn 0.2s ease;
+}
+
+@keyframes annSlideIn {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.ann-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px 0;
+  gap: 12px;
+}
+
+.ann-panel-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  white-space: nowrap;
+}
+
+.ann-panel-tabs {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.ann-tab {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #666;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 16px;
+  transition: all 0.2s;
+}
+
+.ann-tab.active {
+  background: #f0f0ff;
+  color: #5b6abf;
+  font-weight: 500;
+}
+
+.ann-panel-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ann-panel-close:hover {
+  color: #333;
+}
+
+.ann-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+}
+
+.ann-empty {
+  text-align: center;
+  color: #999;
+  padding: 40px 0;
+  font-size: 14px;
+}
+
+.ann-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ann-list-item {
+  display: flex;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ann-list-item:last-child {
+  border-bottom: none;
+}
+
+.ann-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #5b6abf;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.ann-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ann-item-content {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.ann-item-time {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
 }
 </style>

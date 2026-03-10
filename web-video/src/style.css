@@ -300,7 +300,7 @@ body {
 
 .nav-dropdown-menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
   min-width: 150px;
@@ -309,12 +309,23 @@ body {
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 6px 0;
+  padding-top: 14px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
   transition: opacity 0.15s, transform 0.15s;
   transform: translateX(-50%) translateY(4px);
   z-index: 900;
+}
+
+/* 隐形桥梁：填充触发器与菜单之间的间隙，防止鼠标移动时 hover 丢失 */
+.nav-dropdown-menu::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
 }
 
 .nav-dropdown:hover .nav-dropdown-menu {

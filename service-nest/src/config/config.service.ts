@@ -27,6 +27,10 @@ export interface AppConfig {
     server: string
     key: string
   }
+  kling: {
+    server: string
+    key: string
+  }
   doubao: {
     server: string
     key: string
@@ -76,6 +80,7 @@ export class ConfigService implements OnApplicationBootstrap {
           geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
           grok: { ...defaults.grok, ...stored.grok },
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
+          kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
@@ -143,6 +148,10 @@ export class ConfigService implements OnApplicationBootstrap {
         server: process.env.GROK_IMAGE_SERVER || '',
         key: process.env.GROK_IMAGE_KEY || '',
       },
+      kling: {
+        server: process.env.KLING_SERVER || '',
+        key: process.env.KLING_KEY || '',
+      },
       doubao: {
         server: process.env.DOUBAO_SERVER || '',
         key: process.env.DOUBAO_KEY || '',
@@ -185,6 +194,7 @@ export class ConfigService implements OnApplicationBootstrap {
           geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
           grok: { ...defaults.grok, ...stored.grok },
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
+          kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
@@ -226,6 +236,10 @@ export class ConfigService implements OnApplicationBootstrap {
       grokImage: {
         server: config.grokImage?.server ?? '',
         key: this.maskKey(config.grokImage?.key ?? ''),
+      },
+      kling: {
+        server: config.kling?.server ?? '',
+        key: this.maskKey(config.kling?.key ?? ''),
       },
       doubao: {
         server: config.doubao?.server ?? '',
@@ -273,7 +287,7 @@ export class ConfigService implements OnApplicationBootstrap {
    * 更新单个服务配置
    */
   async updateServiceConfig(
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'email' | 'tutorial' | 'qrcode' | 'footer',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'email' | 'tutorial' | 'qrcode' | 'footer',
     config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string; content?: string },
   ): Promise<AppConfig> {
     const currentConfig = this.getConfig()
@@ -284,6 +298,7 @@ export class ConfigService implements OnApplicationBootstrap {
     if (!currentConfig.geminiImage) currentConfig.geminiImage = { server: '', key: '' }
     if (!currentConfig.grok) currentConfig.grok = { server: '', key: '' }
     if (!currentConfig.grokImage) currentConfig.grokImage = { server: '', key: '' }
+    if (!currentConfig.kling) currentConfig.kling = { server: '', key: '' }
     if (!currentConfig.doubao) currentConfig.doubao = { server: '', key: '' }
     if (!currentConfig.email) currentConfig.email = { smtpServer: 'smtp.163.com', smtpPort: 465, smtpSSL: true, smtpAccount: '', smtpToken: '', smtpFrom: '' }
 
@@ -304,6 +319,9 @@ export class ConfigService implements OnApplicationBootstrap {
     } else if (service === 'grokImage') {
       if (config.server !== undefined) currentConfig.grokImage.server = config.server
       if (config.key !== undefined) currentConfig.grokImage.key = config.key
+    } else if (service === 'kling') {
+      if (config.server !== undefined) currentConfig.kling.server = config.server
+      if (config.key !== undefined) currentConfig.kling.key = config.key
     } else if (service === 'doubao') {
       if (config.server !== undefined) currentConfig.doubao.server = config.server
       if (config.key !== undefined) currentConfig.doubao.key = config.key
@@ -387,6 +405,10 @@ export class ConfigService implements OnApplicationBootstrap {
 
   getGrokImageConfig() {
     return this.getConfig().grokImage || { server: '', key: '' }
+  }
+
+  getKlingConfig() {
+    return this.getConfig().kling || { server: '', key: '' }
   }
 
   getDoubaoConfig() {

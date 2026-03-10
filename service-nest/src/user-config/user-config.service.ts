@@ -30,6 +30,10 @@ export interface UserApiConfig {
     server: string
     key: string
   }
+  kling: {
+    server: string
+    key: string
+  }
   doubao: {
     server: string
     key: string
@@ -108,6 +112,10 @@ export class UserConfigService implements OnApplicationBootstrap {
             server: config.grokImage?.server || '',
             key: config.grokImage?.key || '',
           },
+          kling: {
+            server: config.kling?.server || '',
+            key: config.kling?.key || '',
+          },
           doubao: {
             server: config.doubao?.server || '',
             key: config.doubao?.key || '',
@@ -128,6 +136,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { server: '', key: '' },
       grok: { server: '', key: '', channel: 'aifast' },
       grokImage: { server: '', key: '' },
+      kling: { server: '', key: '' },
       doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
     }
   }
@@ -188,6 +197,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       geminiImage: { ...defaults.geminiImage, ...stored.geminiImage },
       grok: { ...defaults.grok, ...stored.grok },
       grokImage: { ...defaults.grokImage, ...stored.grokImage },
+      kling: { ...defaults.kling, ...stored.kling },
       doubao: { ...defaults.doubao, ...stored.doubao },
     }
   }
@@ -220,6 +230,10 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: {
         server: config.grokImage?.server ?? '',
         key: this.maskKey(config.grokImage?.key ?? ''),
+      },
+      kling: {
+        server: config.kling?.server ?? '',
+        key: this.maskKey(config.kling?.key ?? ''),
       },
       doubao: {
         server: config.doubao?.server ?? '',
@@ -259,7 +273,7 @@ export class UserConfigService implements OnApplicationBootstrap {
    */
   async updateUserServiceConfig(
     userId: string,
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao',
     serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string; xiaohuminiServer?: string; xiaohuminiKey?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
@@ -282,6 +296,9 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'grokImage') {
       if (serviceConfig.server !== undefined) config.grokImage.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.grokImage.key = serviceConfig.key
+    } else if (service === 'kling') {
+      if (serviceConfig.server !== undefined) config.kling.server = serviceConfig.server
+      if (serviceConfig.key !== undefined) config.kling.key = serviceConfig.key
     } else if (service === 'doubao') {
       if (serviceConfig.server !== undefined) config.doubao.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.doubao.key = serviceConfig.key
@@ -334,6 +351,11 @@ export class UserConfigService implements OnApplicationBootstrap {
     return config.grokImage
   }
 
+  async getUserKlingConfig(userId: string) {
+    const config = await this.getUserConfig(userId)
+    return config.kling
+  }
+
   async getUserDoubaoConfig(userId: string) {
     const config = await this.getUserConfig(userId)
     return config.doubao
@@ -350,13 +372,13 @@ export class UserConfigService implements OnApplicationBootstrap {
     options?: {
       syncServer?: boolean
       syncKey?: boolean
-      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao'>
+      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling'>
     },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
     const syncServer = options?.syncServer !== false
     const syncKey = options?.syncKey !== false
-    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao']
+    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'kling', 'doubao']
 
     for (const service of services) {
       if (config[service]) {

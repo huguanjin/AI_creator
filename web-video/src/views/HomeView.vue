@@ -1,12 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { soraApi, veoApi, grokApi, doubaoApi, userConfigApi } from '@/api'
+import { soraApi, veoApi, grokApi, doubaoApi, klingApi, userConfigApi, modelCatalogApi, type AllPlatformModels } from '@/api'
 import { type VideoTask, useVideoStore } from '@/stores/video'
 
 const store = useVideoStore()
 
-const platform = ref<'sora' | 'veo' | 'grok' | 'doubao'>('sora')
+const platform = ref<'sora' | 'veo' | 'grok' | 'doubao' | 'kling'>('sora')
 const isLoading = ref(false)
+
+// 动态模型目录（从数据库加载）
+const platformModels = ref<AllPlatformModels>({})
+const modelsLoaded = ref(false)
+
+const loadPlatformModels = async () => {
+  try {
+    const res = await modelCatalogApi.getAllPlatforms()
+    platformModels.value = res.data.data
+    modelsLoaded.value = true
+  } catch (e) {
+    console.warn('加载模型目录失败，使用自定义输入', e)
+  }
+}
 
 const soraForm = ref({
   model: 'sora-2',
@@ -87,6 +101,33 @@ const doubaoReferenceFiles = ref<File[]>([])
 const doubaoReferenceInput = ref<HTMLInputElement | null>(null)
 const doubaoImageUrls = ref('')
 
+// 可灵 (Kling) 表单
+const klingForm = ref({
+  model: 'Kling-2.1',
+  prompt: '',
+  seconds: '5',
+  size: '16:9',
+  scene_type: 'text_to_video' as string,
+  image: '',
+  images: '' as string,
+  motion_level: '' as string,
+  resolution: '1080p',
+  aspect_ratio: '16:9',
+  last_frame_url: '',
+  video_url: '',
+})
+
+// 可灵模型自定义输入状态
+const klingModelCustom = ref(false)
+
+// 可灵文件上传
+const klingImageFile = ref<File | null>(null)
+const klingImageFileInput = ref<HTMLInputElement | null>(null)
+const klingLastFrameFile = ref<File | null>(null)
+const klingLastFrameFileInput = ref<HTMLInputElement | null>(null)
+const klingReferenceFiles = ref<File[]>([])
+const klingReferenceInput = ref<HTMLInputElement | null>(null)
+
 // API 快捷配置
 const apiConfigVisible = ref(false)
 const apiConfigSaving = ref(false)
@@ -97,13 +138,14 @@ const apiConfig = ref<Record<string, { server: string; key: string; characterSer
   veo: { server: '', key: '' },
   grok: { server: '', key: '' },
   doubao: { server: '', key: '' },
+  kling: { server: '', key: '' },
 })
 
 const loadApiConfig = async () => {
   try {
     const response = await userConfigApi.getFullConfig()
     const data = response.data.data
-    for (const svc of ['sora', 'veo', 'grok', 'doubao'] as const) {
+    for (const svc of ['sora', 'veo', 'grok', 'doubao', 'kling'] as const) {
       if (data[svc]) {
         apiConfig.value[svc] = { server: data[svc].server || '', key: data[svc].key || '' }
       }
@@ -191,7 +233,9 @@ const createVideo = async () => {
       ? veoForm.value.prompt
       : platform.value === 'doubao'
         ? doubaoForm.value.prompt
-        : grokForm.value.prompt
+        : platform.value === 'kling'
+          ? klingForm.value.prompt
+          : grokForm.value.prompt
   if (!prompt.trim()) {
     alert('请输入提示词')
     return
@@ -277,6 +321,48 @@ const createVideo = async () => {
         channel: doubaoForm.value.channel,
       }
     }
+    else if (platform.value === 'kling') {
+      // 可灵 - JSON 请求
+      const metadata: Record<string, any> = {}
+      if (klingForm.value.scene_type) metadata.scene_type = klingForm.value.scene_type
+      if (klingForm.value.motion_level) metadata.motion_level = klingForm.value.motion_level
+      if (klingForm.value.last_frame_url) metadata.last_frame_url = klingForm.value.last_frame_url
+      if (klingForm.value.video_url) metadata.video_url = klingForm.value.video_url
+      metadata.output_config = {
+        resolution: klingForm.value.resolution,
+        aspect_ratio: klingForm.value.aspect_ratio,
+      }
+
+      const klingParams: any = {
+        model: klingForm.value.model,
+        prompt: klingForm.value.prompt,
+      }
+      if (klingForm.value.seconds) klingParams.seconds = klingForm.value.seconds
+      if (klingForm.value.size) klingParams.size = klingForm.value.size
+      // 没有上传文件时才传 URL
+      if (!klingImageFile.value && klingForm.value.image) klingParams.image = klingForm.value.image
+      if (klingReferenceFiles.value.length === 0 && klingForm.value.images) {
+        klingParams.images = klingForm.value.images.split('\n').map((u: string) => u.trim()).filter(Boolean)
+      }
+      if (Object.keys(metadata).length > 0) klingParams.metadata = metadata
+
+      response = await klingApi.createVideo(
+        klingParams,
+        klingImageFile.value || undefined,
+        klingLastFrameFile.value || undefined,
+        klingReferenceFiles.value.length > 0 ? klingReferenceFiles.value : undefined,
+      )
+
+      task = {
+        id: response.data.id,
+        model: klingForm.value.model,
+        prompt: klingForm.value.prompt,
+        status: 'queued',
+        progress: 0,
+        created_at: Date.now(),
+        platform: 'kling',
+      }
+    }
     else {
       // Grok
       response = await grokApi.createVideo({
@@ -320,6 +406,16 @@ const createVideo = async () => {
       doubaoLastFrame.value = null
       doubaoReferenceFiles.value = []
       doubaoImageUrls.value = ''
+    }
+    else if (platform.value === 'kling') {
+      klingForm.value.prompt = ''
+      klingForm.value.image = ''
+      klingForm.value.images = ''
+      klingForm.value.last_frame_url = ''
+      klingForm.value.video_url = ''
+      klingImageFile.value = null
+      klingLastFrameFile.value = null
+      klingReferenceFiles.value = []
     }
     else {
       grokForm.value.prompt = ''
@@ -414,8 +510,40 @@ const removeDoubaoReferenceFile = (index: number) => {
   doubaoReferenceFiles.value.splice(index, 1)
 }
 
+// 可灵参考图处理
+const handleKlingImageFile = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    klingImageFile.value = input.files[0]
+  }
+  input.value = ''
+}
+
+// 可灵尾帧图处理
+const handleKlingLastFrameFile = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files && input.files[0]) {
+    klingLastFrameFile.value = input.files[0]
+  }
+  input.value = ''
+}
+
+// 可灵多图参考处理
+const handleKlingReferenceSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files) {
+    const newFiles = Array.from(input.files)
+    klingReferenceFiles.value = [...klingReferenceFiles.value, ...newFiles]
+  }
+  input.value = ''
+}
+
+const removeKlingReferenceFile = (index: number) => {
+  klingReferenceFiles.value.splice(index, 1)
+}
+
 // 轮询任务状态
-const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao', taskChannel?: string) => {
+const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling', taskChannel?: string) => {
   const maxAttempts = 120
   let attempts = 0
 
@@ -431,7 +559,9 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
           ? await veoApi.queryVideo(taskId)
           : taskPlatform === 'doubao'
             ? await doubaoApi.queryVideo(taskId, taskChannel)
-            : await grokApi.queryVideo(taskId, taskChannel)
+            : taskPlatform === 'kling'
+              ? await klingApi.queryVideo(taskId)
+              : await grokApi.queryVideo(taskId, taskChannel)
 
       const data = response.data
 
@@ -466,6 +596,9 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
 
 // 恢复未完成任务的轮询
 onMounted(async () => {
+  // 加载模型目录
+  await loadPlatformModels()
+
   // 加载用户 API 配置
   await loadApiConfig()
 
@@ -512,13 +645,20 @@ onMounted(async () => {
       >
         🫘 豆包 (Doubao)
       </button>
+      <button
+        class="tab"
+        :class="{ active: platform === 'kling' }"
+        @click="platform = 'kling'"
+      >
+        🎞️ 可灵 (Kling)
+      </button>
     </div>
 
     <div class="grid grid-2">
       <!-- 左侧：输入表单 -->
       <div class="card">
         <h2 class="card-title">
-          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : '🫘 豆包视频生成' }}
+          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : platform === 'kling' ? '🎞️ 可灵视频生成' : '🫘 豆包视频生成' }}
         </h2>
 
         <!-- API 快捷配置 -->
@@ -604,12 +744,15 @@ onMounted(async () => {
                 v-model="soraForm.model"
                 class="form-select"
               >
-                <option value="sora-2">
-                  sora-2
-                </option>
-                <option value="sora-2-pro">
-                  sora-2-pro
-                </option>
+                <template v-if="platformModels.sora && Object.keys(platformModels.sora).length">
+                  <optgroup v-for="(models, category) in platformModels.sora" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <option value="sora-2">sora-2</option>
+                  <option value="sora-2-pro">sora-2-pro</option>
+                </template>
               </select>
               <input
                 v-else
@@ -723,20 +866,27 @@ onMounted(async () => {
                 v-model="veoForm.model"
                 class="form-select"
               >
-                <optgroup label="✨ 高质量版本">
-                  <option value="veo_3_1">veo_3_1</option>
-                  <option value="veo_3_1-4K">veo_3_1-4K</option>
-                </optgroup>
-                <optgroup label="⚡ 快速版本">
-                  <option value="veo_3_1-fast">veo_3_1-fast</option>
-                  <option value="veo_3_1-fast-4K">veo_3_1-fast-4K</option>
-                </optgroup>
-                <optgroup label="🎨 仅参考图版本">
-                  <option value="veo_3_1-components">veo_3_1-components</option>
-                  <option value="veo_3_1-components-4K">veo_3_1-components-4K</option>
-                  <option value="veo_3_1-fast-components">veo_3_1-fast-components</option>
-                  <option value="veo_3_1-fast-components-4K">veo_3_1-fast-components-4K</option>
-                </optgroup>
+                <template v-if="platformModels.veo && Object.keys(platformModels.veo).length">
+                  <optgroup v-for="(models, category) in platformModels.veo" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <optgroup label="✨ 高质量版本">
+                    <option value="veo_3_1">veo_3_1</option>
+                    <option value="veo_3_1-4K">veo_3_1-4K</option>
+                  </optgroup>
+                  <optgroup label="⚡ 快速版本">
+                    <option value="veo_3_1-fast">veo_3_1-fast</option>
+                    <option value="veo_3_1-fast-4K">veo_3_1-fast-4K</option>
+                  </optgroup>
+                  <optgroup label="🎨 仅参考图版本">
+                    <option value="veo_3_1-components">veo_3_1-components</option>
+                    <option value="veo_3_1-components-4K">veo_3_1-components-4K</option>
+                    <option value="veo_3_1-fast-components">veo_3_1-fast-components</option>
+                    <option value="veo_3_1-fast-components-4K">veo_3_1-fast-components-4K</option>
+                  </optgroup>
+                </template>
               </select>
               <input
                 v-else
@@ -850,15 +1000,22 @@ onMounted(async () => {
                 v-model="grokForm.model"
                 class="form-select"
               >
-                <optgroup label="aifast 接口">
-                  <option value="grok-video-3">grok-video-3 (6秒)</option>
-                  <option value="grok-video-3-max">grok-video-3-max (15秒)</option>
-                  <option value="grok-video-pro">grok-video-pro (10秒)</option>
-                </optgroup>
-                <optgroup label="xiaohumini站 接口">
-                  <option value="grok-video-3-10s">grok-video-3-10s (10秒)</option>
-                  <option value="grok-video-3-15s">grok-video-3-15s (15秒)</option>
-                </optgroup>
+                <template v-if="platformModels.grok && Object.keys(platformModels.grok).length">
+                  <optgroup v-for="(models, category) in platformModels.grok" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <optgroup label="aifast 接口">
+                    <option value="grok-video-3">grok-video-3 (6秒)</option>
+                    <option value="grok-video-3-max">grok-video-3-max (15秒)</option>
+                    <option value="grok-video-pro">grok-video-pro (10秒)</option>
+                  </optgroup>
+                  <optgroup label="xiaohumini站 接口">
+                    <option value="grok-video-3-10s">grok-video-3-10s (10秒)</option>
+                    <option value="grok-video-3-15s">grok-video-3-15s (15秒)</option>
+                  </optgroup>
+                </template>
               </select>
               <input
                 v-else
@@ -966,7 +1123,7 @@ onMounted(async () => {
         </template>
 
         <!-- 豆包 表单 -->
-        <template v-else>
+        <template v-else-if="platform === 'doubao'">
           <div class="form-group">
             <label class="form-label">接口渠道</label>
             <select v-model="doubaoForm.channel" class="form-select">
@@ -983,25 +1140,32 @@ onMounted(async () => {
                 v-model="doubaoForm.model"
                 class="form-select"
               >
-                <template v-if="doubaoForm.channel === 'aifast'">
-                  <optgroup label="🎬 标准版">
-                    <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
-                    <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
-                    <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
+                <template v-if="platformModels.doubao && Object.keys(platformModels.doubao).length">
+                  <optgroup v-for="(models, category) in platformModels.doubao" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
                   </optgroup>
                 </template>
                 <template v-else>
-                  <optgroup label="🎬 Seedance 1.5 Pro">
-                    <option value="doubao-seedance-1-5-pro-251215">doubao-seedance-1-5-pro-251215 (文生/首帧/首尾帧)</option>
-                  </optgroup>
-                  <optgroup label="⚡ Seedance 1.0 Pro">
-                    <option value="doubao-seedance-1-0-pro-250528">doubao-seedance-1-0-pro-250528 (文生/首帧/首尾帧)</option>
-                    <option value="doubao-seedance-1-0-pro-fast-251015">doubao-seedance-1-0-pro-fast-251015 (文生/首帧)</option>
-                  </optgroup>
-                  <optgroup label="🎨 Seedance 1.0 Lite">
-                    <option value="doubao-seedance-1-0-lite-t2v-250428">doubao-seedance-1-0-lite-t2v-250428 (文生)</option>
-                    <option value="doubao-seedance-1-0-lite-i2v-250428">doubao-seedance-1-0-lite-i2v-250428 (首帧/首尾帧/参考图)</option>
-                  </optgroup>
+                  <template v-if="doubaoForm.channel === 'aifast'">
+                    <optgroup label="🎬 标准版">
+                      <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
+                      <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
+                      <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
+                    </optgroup>
+                  </template>
+                  <template v-else>
+                    <optgroup label="🎬 Seedance 1.5 Pro">
+                      <option value="doubao-seedance-1-5-pro-251215">doubao-seedance-1-5-pro-251215 (文生/首帧/首尾帧)</option>
+                    </optgroup>
+                    <optgroup label="⚡ Seedance 1.0 Pro">
+                      <option value="doubao-seedance-1-0-pro-250528">doubao-seedance-1-0-pro-250528 (文生/首帧/首尾帧)</option>
+                      <option value="doubao-seedance-1-0-pro-fast-251015">doubao-seedance-1-0-pro-fast-251015 (文生/首帧)</option>
+                    </optgroup>
+                    <optgroup label="🎨 Seedance 1.0 Lite">
+                      <option value="doubao-seedance-1-0-lite-t2v-250428">doubao-seedance-1-0-lite-t2v-250428 (文生)</option>
+                      <option value="doubao-seedance-1-0-lite-i2v-250428">doubao-seedance-1-0-lite-i2v-250428 (首帧/首尾帧/参考图)</option>
+                    </optgroup>
+                  </template>
                 </template>
               </select>
               <input
@@ -1232,6 +1396,259 @@ onMounted(async () => {
           </template>
         </template>
 
+        <!-- 可灵 (Kling) 表单 -->
+        <template v-else>
+          <div class="form-group">
+            <label class="form-label">模型</label>
+            <div class="input-with-toggle">
+              <select
+                v-if="!klingModelCustom"
+                v-model="klingForm.model"
+                class="form-select"
+              >
+                <template v-if="platformModels.kling && Object.keys(platformModels.kling).length">
+                  <optgroup v-for="(models, category) in platformModels.kling" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <optgroup label="🎬 标准版">
+                    <option value="Kling-1.6">Kling-1.6</option>
+                    <option value="Kling-2.0">Kling-2.0</option>
+                    <option value="Kling-2.1">Kling-2.1</option>
+                    <option value="Kling-2.5">Kling-2.5</option>
+                    <option value="Kling-2.6">Kling-2.6</option>
+                    <option value="Kling-3.0">Kling-3.0</option>
+                  </optgroup>
+                  <optgroup label="✨ 高级版">
+                    <option value="Kling-3.0-Omni">Kling-3.0-Omni</option>
+                    <option value="Kling-O1">Kling-O1</option>
+                  </optgroup>
+                  <optgroup label="📦 按量计费组合">
+                    <option value="kling-3.0-omni-1080p-ref-audio">kling-3.0-omni-1080p-ref-audio</option>
+                    <option value="kling-2.6-motion-pro-1080p">kling-2.6-motion-pro-1080p</option>
+                    <option value="kling-avatar-720p">kling-avatar-720p</option>
+                    <option value="kling-identify-face">kling-identify-face</option>
+                  </optgroup>
+                </template>
+              </select>
+              <input
+                v-else
+                v-model="klingForm.model"
+                type="text"
+                class="form-input"
+                placeholder="输入自定义模型名称"
+              >
+              <button
+                type="button"
+                class="toggle-btn"
+                :title="klingModelCustom ? '切换为下拉选择' : '切换为自定义输入'"
+                @click="klingModelCustom = !klingModelCustom"
+              >
+                {{ klingModelCustom ? '📋' : '✏️' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">场景类型</label>
+            <select v-model="klingForm.scene_type" class="form-select">
+              <option value="text_to_video">文生视频</option>
+              <option value="image_to_video">图生视频</option>
+              <option value="motion_control">运动控制</option>
+              <option value="avatar">数字人</option>
+              <option value="lip_sync">口型同步</option>
+              <option value="template_effect">模板特效</option>
+              <option value="first_last_frame">首尾帧</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">提示词</label>
+            <textarea
+              v-model="klingForm.prompt"
+              class="form-textarea"
+              placeholder="描述你想要生成的视频内容..."
+            />
+          </div>
+
+          <!-- 短参数并排显示 -->
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">时长 (秒)</label>
+              <input
+                v-model="klingForm.seconds"
+                type="number"
+                class="form-input"
+                min="3"
+                max="15"
+                step="1"
+                placeholder="3-15"
+              >
+            </div>
+            <div class="form-group">
+              <label class="form-label">分辨率</label>
+              <select v-model="klingForm.resolution" class="form-select">
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">画面比例</label>
+              <select v-model="klingForm.aspect_ratio" class="form-select">
+                <option value="16:9">横屏 16:9</option>
+                <option value="9:16">竖屏 9:16</option>
+                <option value="1:1">正方 1:1</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">运动幅度</label>
+              <select v-model="klingForm.motion_level" class="form-select">
+                <option value="">默认</option>
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 参考图：图生视频 / 首尾帧 / 运动控制 / 数字人 时显示 -->
+          <template v-if="['image_to_video', 'first_last_frame', 'motion_control', 'avatar'].includes(klingForm.scene_type)">
+            <div class="form-group">
+              <label class="form-label">参考图 (图生视频)</label>
+              <div class="reference-upload">
+                <input
+                  ref="klingImageFileInput"
+                  type="file"
+                  accept="image/*"
+                  style="display: none"
+                  @change="handleKlingImageFile"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  @click="klingImageFileInput?.click()"
+                >
+                  📷 上传参考图
+                </button>
+                <span v-if="klingImageFile" class="file-count">
+                  {{ klingImageFile.name }}
+                  <button type="button" class="btn-clear" @click="klingImageFile = null">清除</button>
+                </span>
+              </div>
+              <input
+                v-if="!klingImageFile"
+                v-model="klingForm.image"
+                type="text"
+                class="form-input"
+                style="margin-top: 6px"
+                placeholder="或输入图片 URL"
+              >
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">多图参考 (可选)</label>
+              <div class="reference-upload">
+                <input
+                  ref="klingReferenceInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style="display: none"
+                  @change="handleKlingReferenceSelect"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  @click="klingReferenceInput?.click()"
+                >
+                  📷 上传多张参考图
+                </button>
+                <span v-if="klingReferenceFiles.length > 0" class="file-count">
+                  已选 {{ klingReferenceFiles.length }} 张
+                  <button type="button" class="btn-clear" @click="klingReferenceFiles = []">清除</button>
+                </span>
+              </div>
+              <div v-if="klingReferenceFiles.length > 0" class="reference-preview">
+                <div
+                  v-for="(file, index) in klingReferenceFiles"
+                  :key="index"
+                  class="preview-item"
+                >
+                  <img :src="getFilePreviewUrl(file)" :alt="file.name">
+                  <span class="preview-name">{{ file.name }}</span>
+                  <button
+                    type="button"
+                    class="preview-remove"
+                    @click="removeKlingReferenceFile(index)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              <textarea
+                v-if="klingReferenceFiles.length === 0"
+                v-model="klingForm.images"
+                class="form-textarea"
+                style="margin-top: 6px"
+                placeholder="或输入图片URL，每行一个"
+                rows="2"
+              />
+            </div>
+          </template>
+
+          <!-- 尾帧图：首尾帧模式时显示 -->
+          <template v-if="klingForm.scene_type === 'first_last_frame'">
+            <div class="form-group">
+              <label class="form-label">尾帧图</label>
+              <div class="reference-upload">
+                <input
+                  ref="klingLastFrameFileInput"
+                  type="file"
+                  accept="image/*"
+                  style="display: none"
+                  @change="handleKlingLastFrameFile"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  @click="klingLastFrameFileInput?.click()"
+                >
+                  📷 上传尾帧图
+                </button>
+                <span v-if="klingLastFrameFile" class="file-count">
+                  {{ klingLastFrameFile.name }}
+                  <button type="button" class="btn-clear" @click="klingLastFrameFile = null">清除</button>
+                </span>
+              </div>
+              <input
+                v-if="!klingLastFrameFile"
+                v-model="klingForm.last_frame_url"
+                type="text"
+                class="form-input"
+                style="margin-top: 6px"
+                placeholder="或输入尾帧图 URL"
+              >
+            </div>
+          </template>
+
+          <!-- 参考视频：运动控制 / 口型同步 时显示 -->
+          <template v-if="['motion_control', 'lip_sync'].includes(klingForm.scene_type)">
+            <div class="form-group">
+              <label class="form-label">参考视频 URL</label>
+              <input
+                v-model="klingForm.video_url"
+                type="text"
+                class="form-input"
+                placeholder="https://example.com/video.mp4"
+              >
+            </div>
+          </template>
+        </template>
+
         <button
           class="btn btn-primary"
           style="width: 100%"
@@ -1358,6 +1775,17 @@ onMounted(async () => {
 .input-with-toggle {
   display: flex;
   gap: 8px;
+}
+
+/* 两列并排布局 */
+.form-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-row-2col .form-group {
+  margin-bottom: 0;
 }
 
 .input-with-toggle .form-select,

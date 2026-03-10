@@ -252,6 +252,7 @@ const serviceLabels: Record<string, string> = {
   grok: 'Grok',
   grokImage: 'Grok Image',
   doubao: '豆包 (Doubao)',
+  kling: '可灵 (Kling)',
 }
 
 const fieldLabels: Record<string, string> = {

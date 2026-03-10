@@ -2,8 +2,8 @@ export class CreateVideoTaskDto {
   /** 外部任务 ID（从 API 返回的 ID） */
   externalTaskId: string
 
-  /** 平台: sora / veo / grok / doubao */
-  platform: 'sora' | 'veo' | 'grok' | 'doubao'
+  /** 平台: sora / veo / grok / doubao / kling */
+  platform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling'
 
   /** 使用的模型 */
   model: string

@@ -28,6 +28,7 @@
               <router-link to="/admin" class="dropdown-item">👥 用户管理</router-link>
               <router-link to="/admin/feedback" class="dropdown-item">📝 反馈管理</router-link>
               <router-link to="/admin/announcements" class="dropdown-item">📢 公告管理</router-link>
+              <router-link to="/admin/models" class="dropdown-item">📦 模型目录</router-link>
             </div>
           </div>
         </nav>

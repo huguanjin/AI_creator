@@ -290,6 +290,97 @@ export const doubaoApi = {
     api.get(`/v1/doubao/query?id=${encodeURIComponent(id)}${channel ? `&channel=${encodeURIComponent(channel)}` : ''}`),
 }
 
+// ============ 可灵 (Kling) API ============
+
+export interface CreateKlingVideoParams {
+  model: string
+  prompt: string
+  seconds?: string
+  size?: string
+  image?: string
+  images?: string[]
+  metadata?: {
+    scene_type?: string
+    motion_level?: string
+    offpeak?: boolean
+    last_frame_url?: string
+    video_url?: string
+    output_config?: {
+      resolution?: string
+      aspect_ratio?: string
+    }
+    file_infos?: Array<{
+      file_url: string
+      file_type?: string
+    }>
+  }
+}
+
+export const klingApi = {
+  // 创建视频（支持本地文件上传 + URL 方式）
+  createVideo: (
+    params: CreateKlingVideoParams,
+    imageFile?: File,
+    lastFrameFile?: File,
+    referenceFiles?: File[],
+  ) => {
+    const hasFiles = !!imageFile || !!lastFrameFile || (referenceFiles && referenceFiles.length > 0)
+
+    if (hasFiles) {
+      // 有文件时用 multipart/form-data
+      const formData = new FormData()
+      formData.append('model', params.model)
+      formData.append('prompt', params.prompt)
+      if (params.seconds) formData.append('seconds', String(params.seconds))
+      if (params.size) formData.append('size', params.size)
+
+      // 参考图：优先文件，其次 URL
+      if (imageFile) {
+        formData.append('image_file', imageFile)
+      } else if (params.image) {
+        formData.append('image', params.image)
+      }
+
+      // 尾帧文件
+      if (lastFrameFile) {
+        formData.append('last_frame_file', lastFrameFile)
+      }
+
+      // 多张参考图文件
+      if (referenceFiles && referenceFiles.length > 0) {
+        for (const file of referenceFiles) {
+          formData.append('reference_files', file)
+        }
+      } else if (params.images && params.images.length > 0) {
+        formData.append('images', JSON.stringify(params.images))
+      }
+
+      if (params.metadata) formData.append('metadata', JSON.stringify(params.metadata))
+
+      return api.post('/v1/kling/create', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    }
+
+    // 无文件时用 JSON
+    const body: Record<string, any> = {
+      model: params.model,
+      prompt: params.prompt,
+    }
+    if (params.seconds) body.seconds = String(params.seconds)
+    if (params.size) body.size = params.size
+    if (params.image) body.image = params.image
+    if (params.images && params.images.length > 0) body.images = params.images
+    if (params.metadata) body.metadata = JSON.stringify(params.metadata)
+
+    return api.post('/v1/kling/create', body)
+  },
+
+  // 查询视频状态
+  queryVideo: (id: string) =>
+    api.get(`/v1/kling/query?id=${encodeURIComponent(id)}`),
+}
+
 // ============ Gemini Image API ============
 
 export interface CreateGeminiImageParams {
@@ -410,6 +501,7 @@ export interface AppConfig {
   grok: ServiceConfig
   grokImage: ServiceConfig
   doubao: ServiceConfig
+  kling: ServiceConfig
   email: EmailConfig
   tutorialUrl: string
   qrcodeUrl: string
@@ -443,6 +535,7 @@ export interface UserApiConfig {
   grok: ServiceConfig
   grokImage: ServiceConfig
   doubao: ServiceConfig
+  kling: ServiceConfig
 }
 
 export const userConfigApi = {
@@ -455,7 +548,7 @@ export const userConfigApi = {
     api.get<{ status: string; data: UserApiConfig }>('/v1/user-config/full'),
 
   // 更新用户单个服务配置
-  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao', config: Partial<ServiceConfig>) =>
+  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling', config: Partial<ServiceConfig>) =>
     api.put<{ status: string; message: string; data: UserApiConfig }>(`/v1/user-config/${service}`, config),
 
   // 同步默认配置到所有服务
@@ -468,7 +561,7 @@ export const userConfigApi = {
 export interface VideoTaskRecord {
   externalTaskId: string
   username: string
-  platform: 'sora' | 'veo' | 'grok' | 'doubao'
+  platform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling'
   model: string
   prompt: string
   params?: Record<string, any>
@@ -692,6 +785,79 @@ export const announcementApi = {
     api.delete<{ status: string; message: string }>(
       '/v1/announcements',
       { data: { ids } },
+    ),
+}
+
+// ============ Model Catalog API ============
+
+export interface ModelCatalogItem {
+  _id: string
+  platform: string
+  category: string
+  name: string
+  value: string
+  sort: number
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+/** 按 category 分组的模型列表 { category: [{ name, value }] } */
+export type ModelCatalogGrouped = Record<string, { name: string; value: string }[]>
+
+/** 所有平台的模型 { platform: { category: [{ name, value }] } } */
+export type AllPlatformModels = Record<string, ModelCatalogGrouped>
+
+export const modelCatalogApi = {
+  // 获取指定平台的已启用模型（分组，前端下拉菜单用）
+  getByPlatform: (platform: string) =>
+    api.get<{ status: string; data: ModelCatalogGrouped }>(
+      `/v1/model-catalog/platform/${encodeURIComponent(platform)}`,
+    ),
+
+  // 获取所有平台的已启用模型（一次性加载）
+  getAllPlatforms: () =>
+    api.get<{ status: string; data: AllPlatformModels }>(
+      '/v1/model-catalog/all-platforms',
+    ),
+
+  // 管理员获取全部模型（含禁用）
+  getAll: (platform?: string) =>
+    api.get<{ status: string; data: ModelCatalogItem[] }>(
+      '/v1/model-catalog',
+      { params: { platform } },
+    ),
+
+  // 管理员创建模型
+  create: (data: { platform: string; category: string; name: string; value: string; sort?: number; enabled?: boolean }) =>
+    api.post<{ status: string; data: ModelCatalogItem }>(
+      '/v1/model-catalog',
+      data,
+    ),
+
+  // 管理员更新模型
+  update: (id: string, data: Partial<{ platform: string; category: string; name: string; value: string; sort: number; enabled: boolean }>) =>
+    api.put<{ status: string; data: ModelCatalogItem }>(
+      `/v1/model-catalog/${encodeURIComponent(id)}`,
+      data,
+    ),
+
+  // 管理员删除模型
+  delete: (id: string) =>
+    api.delete<{ status: string; message: string }>(
+      `/v1/model-catalog/${encodeURIComponent(id)}`,
+    ),
+
+  // 管理员切换启用/禁用
+  toggleEnabled: (id: string) =>
+    api.put<{ status: string; data: ModelCatalogItem }>(
+      `/v1/model-catalog/${encodeURIComponent(id)}/toggle`,
+    ),
+
+  // 管理员初始化默认模型数据
+  seedDefaults: () =>
+    api.post<{ status: string; data: { inserted: number } }>(
+      '/v1/model-catalog/seed',
     ),
 }
 

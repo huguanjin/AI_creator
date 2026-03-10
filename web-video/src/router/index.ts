@@ -85,6 +85,12 @@ const router = createRouter({
       name: 'admin-announcements',
       component: () => import('@/views/AdminAnnouncementView.vue'),
       meta: { requiresAdmin: true },
+    },
+    {
+      path: '/admin/models',
+      name: 'admin-models',
+      component: () => import('@/views/AdminModelCatalogView.vue'),
+      meta: { requiresAdmin: true },
     }
   ]
 })

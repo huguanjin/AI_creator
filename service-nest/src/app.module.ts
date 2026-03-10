@@ -4,6 +4,7 @@ import { SoraModule } from './sora/sora.module'
 import { VeoModule } from './veo/veo.module'
 import { GeminiImageModule } from './gemini-image/gemini-image.module'
 import { GrokVideoModule } from './grok-video/grok-video.module'
+import { KlingModule } from './kling/kling.module'
 import { DoubaoModule } from './doubao/doubao.module'
 import { ConfigModule } from './config/config.module'
 import { DatabaseModule } from './database/database.module'
@@ -15,6 +16,7 @@ import { AdminModule } from './admin/admin.module'
 import { FeedbackModule } from './feedback/feedback.module'
 import { EmailModule } from './email/email.module'
 import { AnnouncementModule } from './announcement/announcement.module'
+import { ModelCatalogModule } from './model-catalog/model-catalog.module'
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { AnnouncementModule } from './announcement/announcement.module'
     GeminiImageModule,
     // Grok 视频生成模块
     GrokVideoModule,
+    // 可灵视频生成模块
+    KlingModule,
     // 豆包视频生成模块
     DoubaoModule,
     // 管理员模块 - 用户管理、任务统计
@@ -53,6 +57,8 @@ import { AnnouncementModule } from './announcement/announcement.module'
     FeedbackModule,
     // 系统公告模块
     AnnouncementModule,
+    // 模型目录管理模块
+    ModelCatalogModule,
   ],
 })
 export class AppModule {}

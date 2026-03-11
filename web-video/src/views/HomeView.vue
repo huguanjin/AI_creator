@@ -208,6 +208,21 @@ const statusText: Record<string, string> = {
   failed: '失败',
 }
 
+const copyPrompt = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('提示词已复制')
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    alert('提示词已复制')
+  }
+}
+
 // 检查当前平台 API 是否已配置
 const isApiConfigMissing = computed(() => {
   const cfg = apiConfig.value[platform.value]
@@ -1677,8 +1692,9 @@ onMounted(async () => {
             class="task-item"
           >
             <div class="task-info">
-              <div class="task-title">
+              <div class="task-title" :title="task.prompt">
                 {{ task.prompt.slice(0, 50) }}{{ task.prompt.length > 50 ? '...' : '' }}
+                <button class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button>
               </div>
               <div class="task-id" :title="task.id">
                 ID: {{ task.id }}
@@ -1745,6 +1761,21 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  vertical-align: middle;
+}
+
+.copy-btn:hover {
+  opacity: 1;
 }
 
 .task-id {

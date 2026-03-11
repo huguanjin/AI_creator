@@ -227,6 +227,96 @@ export class AdminService implements OnApplicationBootstrap {
   }
 
   /**
+   * 获取全部任务列表（管理员任务管理）
+   * 默认查当天，可按用户、时间段、平台、状态筛选
+   */
+  async getAllTasks(options: {
+    page: number
+    limit: number
+    userId?: string
+    username?: string
+    platform?: string
+    status?: string
+    startTime?: number
+    endTime?: number
+  }) {
+    const col = this.databaseService.getCollection('video_tasks')
+    const filter: Record<string, any> = {}
+
+    if (options.userId) filter.userId = options.userId
+    if (options.platform) filter.platform = options.platform
+    if (options.status) filter.status = options.status
+
+    // 时间范围筛选
+    if (options.startTime || options.endTime) {
+      filter.createdAt = {}
+      if (options.startTime) filter.createdAt.$gte = options.startTime
+      if (options.endTime) filter.createdAt.$lte = options.endTime
+    }
+
+    // 如果按用户名搜索，先查到 userId
+    if (options.username) {
+      const userCol = this.databaseService.getCollection('users')
+      const matchedUsers = await userCol
+        .find({ username: { $regex: options.username, $options: 'i' } }, { projection: { _id: 1 } })
+        .limit(50)
+        .toArray()
+      const userIds = matchedUsers.map((u: any) => u._id.toString())
+      if (userIds.length === 0) {
+        return { data: [], total: 0, page: options.page, limit: options.limit }
+      }
+      filter.userId = { $in: userIds }
+    }
+
+    const page = options.page || 1
+    const limit = Math.min(options.limit || 20, 100)
+    const skip = (page - 1) * limit
+
+    const [tasks, total] = await Promise.all([
+      col.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).toArray(),
+      col.countDocuments(filter),
+    ])
+
+    // 批量查询用户名
+    const userIds = [...new Set(tasks.map((t: any) => t.userId).filter(Boolean))]
+    const usernameMap: Record<string, string> = {}
+    if (userIds.length > 0) {
+      const userCol = this.databaseService.getCollection('users')
+      const users = await userCol
+        .find(
+          { _id: { $in: userIds.map((id) => { try { return new ObjectId(id) } catch { return id } }) } },
+          { projection: { _id: 1, username: 1 } },
+        )
+        .toArray()
+      for (const u of users) {
+        usernameMap[(u as any)._id.toString()] = (u as any).username
+      }
+    }
+
+    return {
+      data: tasks.map((t: any) => ({
+        _id: t._id?.toString(),
+        externalTaskId: t.externalTaskId,
+        userId: t.userId,
+        username: usernameMap[t.userId] || t.userId,
+        platform: t.platform,
+        model: t.model,
+        prompt: t.prompt,
+        status: t.status,
+        progress: t.progress,
+        video_url: t.video_url,
+        thumbnail_url: t.thumbnail_url,
+        error: t.error,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      })),
+      total,
+      page,
+      limit,
+    }
+  }
+
+  /**
    * 获取平台概览统计
    */
   async getStats() {

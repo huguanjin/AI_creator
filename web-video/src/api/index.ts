@@ -669,6 +669,40 @@ export const adminApi = {
       `/v1/admin/users/${encodeURIComponent(userId)}/reset-password`,
       { newPassword },
     ),
+
+  // 管理员任务管理 - 查询所有用户任务（默认当天）
+  getAllTasks: (params?: {
+    page?: number
+    limit?: number
+    userId?: string
+    username?: string
+    platform?: string
+    status?: string
+    startTime?: number
+    endTime?: number
+  }) =>
+    api.get<{
+      status: string
+      data: Array<{
+        _id: string
+        externalTaskId: string
+        userId: string
+        username: string
+        platform: string
+        model: string
+        prompt: string
+        status: string
+        progress: number
+        video_url?: string
+        thumbnail_url?: string
+        error?: string
+        createdAt: number
+        updatedAt: number
+      }>
+      total: number
+      page: number
+      limit: number
+    }>('/v1/admin/tasks', { params }),
 }
 
 // ============ Feedback API ============

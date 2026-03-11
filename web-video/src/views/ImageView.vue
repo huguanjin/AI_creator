@@ -437,6 +437,21 @@ const deleteHistory = (id: string) => {
   saveHistory()
 }
 
+const copyPrompt = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('提示词已复制')
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    alert('提示词已复制')
+  }
+}
+
 // 清空所有历史
 const clearAllHistory = () => {
   if (confirm('确定要清空所有历史记录吗？')) {
@@ -731,6 +746,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
             </p>
           </div>
           <div class="history-actions">
+            <button @click="copyPrompt(item.prompt)" title="复制提示词">📋 复制</button>
             <button @click="loadFromHistory(item)">查看</button>
             <button class="delete-btn" @click="deleteHistory(item.id)">删除</button>
           </div>

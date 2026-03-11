@@ -32,6 +32,22 @@ const refreshTasks = () => {
   store.loadTasks()
 }
 
+const copyPrompt = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('提示词已复制')
+  } catch {
+    // fallback
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    alert('提示词已复制')
+  }
+}
+
 // 页面加载时从后端获取任务
 onMounted(() => {
   store.loadTasks()
@@ -89,6 +105,7 @@ onMounted(() => {
           <div class="video-card-info">
             <div class="video-card-title" :title="task.prompt">
               {{ task.prompt }}
+              <button class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button>
             </div>
             <div class="video-card-id" :title="task.id">
               ID: {{ task.id }}
@@ -189,5 +206,20 @@ onMounted(() => {
   justify-content: center;
   padding: 8px 12px;
   font-size: 12px;
+}
+
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  vertical-align: middle;
+}
+
+.copy-btn:hover {
+  opacity: 1;
 }
 </style>

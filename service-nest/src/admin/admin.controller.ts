@@ -188,6 +188,49 @@ export class AdminController {
   }
 
   /**
+   * 管理员任务管理 - 查询所有用户任务
+   * GET /v1/admin/tasks?page=1&limit=20&username=xxx&platform=sora&status=completed&startTime=xxx&endTime=xxx
+   * 默认查询当天任务
+   */
+  @Get('tasks')
+  async getAllTasks(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('userId') userId?: string,
+    @Query('username') username?: string,
+    @Query('platform') platform?: string,
+    @Query('status') status?: string,
+    @Query('startTime') startTime?: string,
+    @Query('endTime') endTime?: string,
+  ) {
+    this.ensureAdmin(req)
+    this.logger.log(`👑 Admin querying tasks`)
+
+    // 默认查当天
+    let start = startTime ? parseInt(startTime, 10) : undefined
+    let end = endTime ? parseInt(endTime, 10) : undefined
+    if (!start && !end && !userId && !username) {
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      start = todayStart.getTime()
+    }
+
+    const result = await this.adminService.getAllTasks({
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      userId,
+      username,
+      platform,
+      status,
+      startTime: start,
+      endTime: end,
+    })
+
+    return { status: 'success', ...result }
+  }
+
+  /**
    * 获取平台统计概览
    * GET /v1/admin/stats
    */

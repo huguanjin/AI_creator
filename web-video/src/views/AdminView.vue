@@ -48,6 +48,20 @@ const fullConfigLoading = ref(false)
 const fullConfigData = ref<any>(null)
 const fullConfigUsername = ref('')
 
+// ============ 任务管理 ============
+const taskLoading = ref(false)
+const taskList = ref<any[]>([])
+const taskTotal = ref(0)
+const taskPage = ref(1)
+const taskPageSize = ref(20)
+const taskFilterUsername = ref('')
+const taskFilterPlatform = ref('')
+const taskFilterStatus = ref('')
+// 默认当天日期
+const todayStr = new Date().toISOString().slice(0, 10)
+const taskStartDate = ref(todayStr)
+const taskEndDate = ref(todayStr)
+
 // ============ 格式化 ============
 const formatTime = (ts: number) => {
   if (!ts) return '-'
@@ -183,10 +197,55 @@ const changeImagePage = (page: number) => {
   loadImageTasks()
 }
 
+// ============ 任务管理 ============
+const loadAllTasks = async () => {
+  taskLoading.value = true
+  try {
+    const params: Record<string, any> = {
+      page: taskPage.value,
+      limit: taskPageSize.value,
+    }
+    if (taskFilterUsername.value) params.username = taskFilterUsername.value
+    if (taskFilterPlatform.value) params.platform = taskFilterPlatform.value
+    if (taskFilterStatus.value) params.status = taskFilterStatus.value
+    if (taskStartDate.value) {
+      params.startTime = new Date(taskStartDate.value).getTime()
+    }
+    if (taskEndDate.value) {
+      // 结束日期取当天 23:59:59
+      const end = new Date(taskEndDate.value)
+      end.setHours(23, 59, 59, 999)
+      params.endTime = end.getTime()
+    }
+    const res = await adminApi.getAllTasks(params)
+    taskList.value = res.data.data
+    taskTotal.value = res.data.total
+  } catch (e: any) {
+    console.error('加载任务列表失败:', e)
+  } finally {
+    taskLoading.value = false
+  }
+}
+
+const handleTaskSearch = () => {
+  taskPage.value = 1
+  loadAllTasks()
+}
+
+const changeTaskPage = (page: number) => {
+  const maxPage = Math.ceil(taskTotal.value / taskPageSize.value) || 1
+  if (page < 1 || page > maxPage) return
+  taskPage.value = page
+  loadAllTasks()
+}
+
+const taskTotalPages = computed(() => Math.ceil(taskTotal.value / taskPageSize.value) || 1)
+
 // ============ 初始化 ============
 onMounted(() => {
   loadStats()
   loadUsers()
+  loadAllTasks()
 })
 
 // ============ 重置密码 ============
@@ -261,6 +320,21 @@ const fieldLabels: Record<string, string> = {
   characterServer: '角色 API 地址',
   characterKey: '角色 API 密钥',
 }
+
+const copyPrompt = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    alert('提示词已复制')
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    alert('提示词已复制')
+  }
+}
 </script>
 
 <template>
@@ -296,6 +370,94 @@ const fieldLabels: Record<string, string> = {
         <span v-for="(count, platform) in stats.videoByPlatform" :key="platform" class="platform-tag">
           {{ platform }}: {{ count }}
         </span>
+      </div>
+    </div>
+
+    <!-- 任务管理 -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📋 任务管理</h2>
+        <div class="card-header-actions">
+          <input
+            v-model="taskFilterUsername"
+            placeholder="搜索用户名..."
+            class="search-input"
+            @keyup.enter="handleTaskSearch"
+          />
+          <select v-model="taskFilterPlatform" @change="handleTaskSearch" class="role-filter">
+            <option value="">全部平台</option>
+            <option value="sora">Sora</option>
+            <option value="veo">VEO</option>
+            <option value="grok">Grok</option>
+            <option value="doubao">豆包</option>
+            <option value="kling">可灵</option>
+          </select>
+          <select v-model="taskFilterStatus" @change="handleTaskSearch" class="role-filter">
+            <option value="">全部状态</option>
+            <option value="queued">排队中</option>
+            <option value="processing">生成中</option>
+            <option value="completed">已完成</option>
+            <option value="failed">失败</option>
+          </select>
+        </div>
+      </div>
+      <div class="task-filter-row">
+        <div class="date-range">
+          <label>开始日期</label>
+          <input type="date" v-model="taskStartDate" class="form-input date-input" />
+        </div>
+        <div class="date-range">
+          <label>结束日期</label>
+          <input type="date" v-model="taskEndDate" class="form-input date-input" />
+        </div>
+        <button class="btn" @click="handleTaskSearch" :disabled="taskLoading">
+          {{ taskLoading ? '查询中...' : '🔍 查询' }}
+        </button>
+      </div>
+
+      <!-- 任务表格 -->
+      <div class="table-wrapper">
+        <table class="user-table">
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th>平台</th>
+              <th>模型</th>
+              <th>提示词</th>
+              <th>状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="task in taskList" :key="task._id">
+              <td class="username-cell">{{ task.username }}</td>
+              <td><span class="platform-badge">{{ task.platform }}</span></td>
+              <td class="model-cell">{{ task.model }}</td>
+              <td class="prompt-cell" :title="task.prompt">
+                {{ task.prompt?.slice(0, 40) }}{{ task.prompt?.length > 40 ? '...' : '' }}
+                <button v-if="task.prompt" class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button>
+              </td>
+              <td><span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span></td>
+              <td>{{ formatTime(task.createdAt) }}</td>
+              <td>
+                <a v-if="task.video_url" :href="task.video_url" target="_blank" class="video-link">查看视频</a>
+                <span v-else-if="task.error" class="error-text" :title="task.error">失败</span>
+                <span v-else class="text-muted">-</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div v-if="taskLoading" class="detail-loading">加载中...</div>
+      <div v-if="!taskLoading && taskList.length === 0" class="empty">暂无任务数据</div>
+
+      <!-- 任务分页 -->
+      <div class="pagination" v-if="taskTotalPages > 1">
+        <button class="btn btn-small" :disabled="taskPage <= 1" @click="changeTaskPage(taskPage - 1)">上一页</button>
+        <span class="page-info">第 {{ taskPage }} / {{ taskTotalPages }} 页（共 {{ taskTotal }} 条）</span>
+        <button class="btn btn-small" :disabled="taskPage >= taskTotalPages" @click="changeTaskPage(taskPage + 1)">下一页</button>
       </div>
     </div>
 
@@ -426,7 +588,7 @@ const fieldLabels: Record<string, string> = {
                             <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
                             <span class="task-time">{{ formatTime(task.createdAt) }}</span>
                           </div>
-                          <div class="task-prompt">{{ task.prompt }}</div>
+                          <div class="task-prompt">{{ task.prompt }} <button v-if="task.prompt" class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button></div>
                           <div class="task-meta">
                             <span>模型: {{ task.model }}</span>
                             <span v-if="task.video_url">
@@ -453,7 +615,7 @@ const fieldLabels: Record<string, string> = {
                             <span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span>
                             <span class="task-time">{{ formatTime(task.createdAt) }}</span>
                           </div>
-                          <div class="task-prompt">{{ task.prompt }}</div>
+                          <div class="task-prompt">{{ task.prompt }} <button v-if="task.prompt" class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button></div>
                           <div class="task-meta">
                             <span v-if="task.aspectRatio">比例: {{ task.aspectRatio }}</span>
                             <span v-if="task.images && task.images.length">图片数: {{ task.images.length }}</span>
@@ -623,6 +785,76 @@ const fieldLabels: Record<string, string> = {
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 13px;
+}
+
+/* ============ 任务管理筛选行 ============ */
+.task-filter-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.date-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.date-range label {
+  font-size: 12px;
+  color: #888;
+}
+
+.date-input {
+  width: 160px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.model-cell {
+  font-size: 12px;
+  color: #a78bfa;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-cell {
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: #aaa;
+}
+
+.error-text {
+  color: #f87171;
+  font-size: 12px;
+  cursor: help;
+}
+
+.text-muted {
+  color: #555;
+  font-size: 12px;
+}
+
+.copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  vertical-align: middle;
+}
+
+.copy-btn:hover {
+  opacity: 1;
 }
 
 /* ============ 卡片 ============ */

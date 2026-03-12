@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { soraApi, veoApi, grokApi, doubaoApi, klingApi, userConfigApi, modelCatalogApi, type AllPlatformModels } from '@/api'
+import { soraApi, veoApi, grokApi, doubaoApi, klingApi, viduApi, userConfigApi, modelCatalogApi, type AllPlatformModels } from '@/api'
 import { type VideoTask, useVideoStore } from '@/stores/video'
 
 const store = useVideoStore()
 
-const platform = ref<'sora' | 'veo' | 'grok' | 'doubao' | 'kling'>('sora')
+const platform = ref<'sora' | 'veo' | 'grok' | 'doubao' | 'kling' | 'vidu'>('sora')
 const isLoading = ref(false)
 
 // 动态模型目录（从数据库加载）
@@ -128,6 +128,27 @@ const klingLastFrameFileInput = ref<HTMLInputElement | null>(null)
 const klingReferenceFiles = ref<File[]>([])
 const klingReferenceInput = ref<HTMLInputElement | null>(null)
 
+// Vidu 表单
+const viduForm = ref({
+  task_type: 'text2video' as 'text2video' | 'img2video' | 'reference2video' | 'start-end2video',
+  model: 'TC-vidu-q2',
+  prompt: '',
+  duration: 4,
+  aspect_ratio: '16:9' as '16:9' | '9:16' | '3:4' | '4:3' | '1:1',
+  resolution: '720p',
+  off_peak: false,
+})
+
+// Vidu 模型自定义输入状态
+const viduModelCustom = ref(false)
+
+// Vidu 参考图
+const viduReferenceFiles = ref<File[]>([])
+const viduFileInput = ref<HTMLInputElement | null>(null)
+
+// Vidu subjects (reference2video)
+const viduSubjects = ref('')
+
 // API 快捷配置
 const apiConfigVisible = ref(false)
 const apiConfigSaving = ref(false)
@@ -139,13 +160,14 @@ const apiConfig = ref<Record<string, { server: string; key: string; characterSer
   grok: { server: '', key: '' },
   doubao: { server: '', key: '' },
   kling: { server: '', key: '' },
+  vidu: { server: '', key: '' },
 })
 
 const loadApiConfig = async () => {
   try {
     const response = await userConfigApi.getFullConfig()
     const data = response.data.data
-    for (const svc of ['sora', 'veo', 'grok', 'doubao', 'kling'] as const) {
+    for (const svc of ['sora', 'veo', 'grok', 'doubao', 'kling', 'vidu'] as const) {
       if (data[svc]) {
         apiConfig.value[svc] = { server: data[svc].server || '', key: data[svc].key || '' }
       }
@@ -250,7 +272,9 @@ const createVideo = async () => {
         ? doubaoForm.value.prompt
         : platform.value === 'kling'
           ? klingForm.value.prompt
-          : grokForm.value.prompt
+          : platform.value === 'vidu'
+            ? viduForm.value.prompt
+            : grokForm.value.prompt
   if (!prompt.trim()) {
     alert('请输入提示词')
     return
@@ -378,6 +402,38 @@ const createVideo = async () => {
         platform: 'kling',
       }
     }
+    else if (platform.value === 'vidu') {
+      // Vidu
+      const viduParams: any = {
+        task_type: viduForm.value.task_type,
+        model: viduForm.value.model,
+        prompt: viduForm.value.prompt,
+        duration: viduForm.value.duration,
+        aspect_ratio: viduForm.value.aspect_ratio,
+        resolution: viduForm.value.resolution,
+        off_peak: viduForm.value.off_peak,
+      }
+
+      // reference2video: 传 subjects
+      if (viduForm.value.task_type === 'reference2video' && viduSubjects.value.trim()) {
+        viduParams.subjects = viduSubjects.value.split('\n').map(n => ({ name: n.trim() })).filter(s => s.name)
+      }
+
+      response = await viduApi.createVideo(
+        viduParams,
+        viduReferenceFiles.value.length > 0 ? viduReferenceFiles.value : undefined,
+      )
+
+      task = {
+        id: response.data.id,
+        model: viduForm.value.model,
+        prompt: viduForm.value.prompt,
+        status: 'queued',
+        progress: 0,
+        created_at: Date.now(),
+        platform: 'vidu',
+      }
+    }
     else {
       // Grok
       response = await grokApi.createVideo({
@@ -431,6 +487,11 @@ const createVideo = async () => {
       klingImageFile.value = null
       klingLastFrameFile.value = null
       klingReferenceFiles.value = []
+    }
+    else if (platform.value === 'vidu') {
+      viduForm.value.prompt = ''
+      viduReferenceFiles.value = []
+      viduSubjects.value = ''
     }
     else {
       grokForm.value.prompt = ''
@@ -557,8 +618,22 @@ const removeKlingReferenceFile = (index: number) => {
   klingReferenceFiles.value.splice(index, 1)
 }
 
+// Vidu 参考图处理
+const handleViduFileSelect = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (input.files) {
+    const newFiles = Array.from(input.files)
+    viduReferenceFiles.value = [...viduReferenceFiles.value, ...newFiles]
+  }
+  input.value = ''
+}
+
+const removeViduFile = (index: number) => {
+  viduReferenceFiles.value.splice(index, 1)
+}
+
 // 轮询任务状态
-const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling', taskChannel?: string) => {
+const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling' | 'vidu', taskChannel?: string) => {
   const maxAttempts = 120
   let attempts = 0
 
@@ -576,7 +651,9 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
             ? await doubaoApi.queryVideo(taskId, taskChannel)
             : taskPlatform === 'kling'
               ? await klingApi.queryVideo(taskId)
-              : await grokApi.queryVideo(taskId, taskChannel)
+              : taskPlatform === 'vidu'
+                ? await viduApi.queryVideo(taskId)
+                : await grokApi.queryVideo(taskId, taskChannel)
 
       const data = response.data
 
@@ -667,13 +744,20 @@ onMounted(async () => {
       >
         🎞️ 可灵 (Kling)
       </button>
+      <button
+        class="tab"
+        :class="{ active: platform === 'vidu' }"
+        @click="platform = 'vidu'"
+      >
+        🎬 Vidu
+      </button>
     </div>
 
     <div class="grid grid-2">
       <!-- 左侧：输入表单 -->
       <div class="card">
         <h2 class="card-title">
-          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : platform === 'kling' ? '🎞️ 可灵视频生成' : '🫘 豆包视频生成' }}
+          {{ platform === 'sora' ? '🎨 Sora 视频生成' : platform === 'veo' ? '🎥 VEO 视频生成' : platform === 'grok' ? '⚡ Grok 视频生成' : platform === 'kling' ? '🎞️ 可灵视频生成' : platform === 'vidu' ? '🎬 Vidu 视频生成' : '🫘 豆包视频生成' }}
         </h2>
 
         <!-- API 快捷配置 -->
@@ -1412,7 +1496,7 @@ onMounted(async () => {
         </template>
 
         <!-- 可灵 (Kling) 表单 -->
-        <template v-else>
+        <template v-else-if="platform === 'kling'">
           <div class="form-group">
             <label class="form-label">模型</label>
             <div class="input-with-toggle">
@@ -1660,6 +1744,174 @@ onMounted(async () => {
                 class="form-input"
                 placeholder="https://example.com/video.mp4"
               >
+            </div>
+          </template>
+        </template>
+
+        <!-- Vidu 表单 -->
+        <template v-else>
+          <div class="form-group">
+            <label class="form-label">任务类型</label>
+            <select v-model="viduForm.task_type" class="form-select">
+              <option value="text2video">文生视频</option>
+              <option value="img2video">图生视频</option>
+              <option value="reference2video">参考视频</option>
+              <option value="start-end2video">首尾帧视频</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">模型</label>
+            <div class="input-with-toggle">
+              <select
+                v-if="!viduModelCustom"
+                v-model="viduForm.model"
+                class="form-select"
+              >
+                <template v-if="platformModels.vidu && Object.keys(platformModels.vidu).length">
+                  <optgroup v-for="(models, category) in platformModels.vidu" :key="category" :label="category">
+                    <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                  </optgroup>
+                </template>
+                <template v-else>
+                  <optgroup label="⚡ Turbo">
+                    <option value="TC-vidu-q2-turbo">TC-vidu-q2-turbo</option>
+                    <option value="TC-vidu-q3-turbo">TC-vidu-q3-turbo</option>
+                  </optgroup>
+                  <optgroup label="🎬 标准">
+                    <option value="TC-vidu-q2">TC-vidu-q2</option>
+                  </optgroup>
+                  <optgroup label="✨ Pro">
+                    <option value="TC-vidu-q2-pro">TC-vidu-q2-pro</option>
+                    <option value="TC-vidu-q3-pro">TC-vidu-q3-pro</option>
+                  </optgroup>
+                </template>
+              </select>
+              <input
+                v-else
+                v-model="viduForm.model"
+                type="text"
+                class="form-input"
+                placeholder="输入自定义模型名称"
+              >
+              <button
+                type="button"
+                class="toggle-btn"
+                :title="viduModelCustom ? '切换为下拉选择' : '切换为自定义输入'"
+                @click="viduModelCustom = !viduModelCustom"
+              >
+                {{ viduModelCustom ? '📋' : '✏️' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">提示词</label>
+            <textarea
+              v-model="viduForm.prompt"
+              class="form-textarea"
+              placeholder="描述你想要生成的视频内容..."
+            />
+          </div>
+
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">时长 (秒)</label>
+              <input
+                v-model.number="viduForm.duration"
+                type="number"
+                class="form-input"
+                min="1"
+                max="10"
+                step="1"
+                placeholder="1-10"
+              >
+            </div>
+            <div class="form-group">
+              <label class="form-label">画面比例</label>
+              <select v-model="viduForm.aspect_ratio" class="form-select">
+                <option value="16:9">横屏 16:9</option>
+                <option value="9:16">竖屏 9:16</option>
+                <option value="4:3">4:3</option>
+                <option value="3:4">3:4</option>
+                <option value="1:1">正方 1:1</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2col">
+            <div class="form-group">
+              <label class="form-label">分辨率</label>
+              <select v-model="viduForm.resolution" class="form-select">
+                <option value="540p">540p</option>
+                <option value="720p">720p</option>
+                <option value="1080p">1080p</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">错峰模式</label>
+              <select v-model="viduForm.off_peak" class="form-select">
+                <option :value="false">关闭</option>
+                <option :value="true">开启 (更便宜)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 参考图上传 (img2video / start-end2video 使用) -->
+          <template v-if="['img2video', 'start-end2video', 'reference2video'].includes(viduForm.task_type)">
+            <div class="form-group">
+              <label class="form-label">参考图{{ viduForm.task_type === 'start-end2video' ? ' (首帧+尾帧)' : '' }}</label>
+              <div class="reference-upload">
+                <input
+                  ref="viduFileInput"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style="display: none"
+                  @change="handleViduFileSelect"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  @click="viduFileInput?.click()"
+                >
+                  📷 选择图片
+                </button>
+                <span v-if="viduReferenceFiles.length > 0" class="file-count">
+                  已选 {{ viduReferenceFiles.length }} 张
+                  <button type="button" class="btn-clear" @click="viduReferenceFiles = []">清除</button>
+                </span>
+              </div>
+              <div v-if="viduReferenceFiles.length > 0" class="reference-preview">
+                <div
+                  v-for="(file, index) in viduReferenceFiles"
+                  :key="index"
+                  class="preview-item"
+                >
+                  <img :src="getFilePreviewUrl(file)" :alt="file.name">
+                  <span class="preview-name">{{ file.name }}</span>
+                  <button
+                    type="button"
+                    class="preview-remove"
+                    @click="removeViduFile(index)"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- Subjects (reference2video 使用) -->
+          <template v-if="viduForm.task_type === 'reference2video'">
+            <div class="form-group">
+              <label class="form-label">主体名称 (每行一个)</label>
+              <textarea
+                v-model="viduSubjects"
+                class="form-textarea"
+                placeholder="输入主体名称，每行一个&#10;例如: 小明"
+                rows="3"
+              />
             </div>
           </template>
         </template>

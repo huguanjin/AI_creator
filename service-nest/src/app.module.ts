@@ -6,6 +6,7 @@ import { GeminiImageModule } from './gemini-image/gemini-image.module'
 import { GrokVideoModule } from './grok-video/grok-video.module'
 import { KlingModule } from './kling/kling.module'
 import { DoubaoModule } from './doubao/doubao.module'
+import { ViduModule } from './vidu/vidu.module'
 import { ConfigModule } from './config/config.module'
 import { DatabaseModule } from './database/database.module'
 import { AuthModule } from './auth/auth.module'
@@ -51,6 +52,8 @@ import { ModelCatalogModule } from './model-catalog/model-catalog.module'
     KlingModule,
     // 豆包视频生成模块
     DoubaoModule,
+    // Vidu 视频生成模块
+    ViduModule,
     // 管理员模块 - 用户管理、任务统计
     AdminModule,
     // 问题反馈模块

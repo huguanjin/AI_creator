@@ -312,6 +312,7 @@ const serviceLabels: Record<string, string> = {
   grokImage: 'Grok Image',
   doubao: '豆包 (Doubao)',
   kling: '可灵 (Kling)',
+  vidu: 'Vidu',
 }
 
 const fieldLabels: Record<string, string> = {
@@ -391,6 +392,7 @@ const copyPrompt = async (text: string) => {
             <option value="grok">Grok</option>
             <option value="doubao">豆包</option>
             <option value="kling">可灵</option>
+            <option value="vidu">Vidu</option>
           </select>
           <select v-model="taskFilterStatus" @change="handleTaskSearch" class="role-filter">
             <option value="">全部状态</option>

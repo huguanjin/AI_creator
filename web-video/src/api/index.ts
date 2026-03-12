@@ -381,6 +381,61 @@ export const klingApi = {
     api.get(`/v1/kling/query?id=${encodeURIComponent(id)}`),
 }
 
+// ============ Vidu API ============
+
+export interface CreateViduVideoParams {
+  task_type: 'text2video' | 'img2video' | 'reference2video' | 'start-end2video'
+  model: string
+  prompt: string
+  duration?: number
+  aspect_ratio?: '16:9' | '9:16' | '3:4' | '4:3' | '1:1'
+  resolution?: string
+  images?: string[]
+  subjects?: Array<{ name: string }>
+  off_peak?: boolean
+}
+
+export const viduApi = {
+  // 创建视频（支持参考图上传）
+  createVideo: (params: CreateViduVideoParams, files?: File[]) => {
+    const formData = new FormData()
+    formData.append('task_type', params.task_type)
+    formData.append('model', params.model)
+    formData.append('prompt', params.prompt)
+    if (params.duration) formData.append('duration', String(params.duration))
+    if (params.aspect_ratio) formData.append('aspect_ratio', params.aspect_ratio)
+    if (params.resolution) formData.append('resolution', params.resolution)
+    if (params.off_peak !== undefined) formData.append('off_peak', String(params.off_peak))
+
+    // 图片URL列表（img2video / start-end2video 使用）
+    if (params.images && params.images.length > 0) {
+      formData.append('images', JSON.stringify(params.images))
+    }
+
+    // subjects（reference2video 使用）
+    if (params.subjects && params.subjects.length > 0) {
+      formData.append('subjects', JSON.stringify(params.subjects))
+    }
+
+    // 上传参考图文件
+    if (files && files.length > 0) {
+      for (const file of files) {
+        formData.append('input_reference', file)
+      }
+    }
+
+    return api.post('/v1/vidu/create', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+
+  // 查询视频状态
+  queryVideo: (id: string) =>
+    api.get(`/v1/vidu/query?id=${encodeURIComponent(id)}`),
+}
+
 // ============ Gemini Image API ============
 
 export interface CreateGeminiImageParams {
@@ -502,6 +557,7 @@ export interface AppConfig {
   grokImage: ServiceConfig
   doubao: ServiceConfig
   kling: ServiceConfig
+  vidu: ServiceConfig
   email: EmailConfig
   tutorialUrl: string
   qrcodeUrl: string
@@ -536,6 +592,7 @@ export interface UserApiConfig {
   grokImage: ServiceConfig
   doubao: ServiceConfig
   kling: ServiceConfig
+  vidu: ServiceConfig
 }
 
 export const userConfigApi = {
@@ -548,7 +605,7 @@ export const userConfigApi = {
     api.get<{ status: string; data: UserApiConfig }>('/v1/user-config/full'),
 
   // 更新用户单个服务配置
-  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling', config: Partial<ServiceConfig>) =>
+  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu', config: Partial<ServiceConfig>) =>
     api.put<{ status: string; message: string; data: UserApiConfig }>(`/v1/user-config/${service}`, config),
 
   // 同步默认配置到所有服务
@@ -561,7 +618,7 @@ export const userConfigApi = {
 export interface VideoTaskRecord {
   externalTaskId: string
   username: string
-  platform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling'
+  platform: 'sora' | 'veo' | 'grok' | 'doubao' | 'kling' | 'vidu'
   model: string
   prompt: string
   params?: Record<string, any>

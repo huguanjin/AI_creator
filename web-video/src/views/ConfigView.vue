@@ -27,6 +27,7 @@ const syncServices = ref({
   grokImage: true,
   doubao: true,
   kling: true,
+  vidu: true,
 })
 
 // 编辑模式
@@ -38,6 +39,7 @@ const editMode = ref<{
   grokImage: boolean
   doubao: boolean
   kling: boolean
+  vidu: boolean
 }>({
   sora: false,
   veo: false,
@@ -46,6 +48,7 @@ const editMode = ref<{
   grokImage: false,
   doubao: false,
   kling: false,
+  vidu: false,
 })
 
 // 编辑表单数据
@@ -57,6 +60,7 @@ const editForm = ref<{
   grokImage: ServiceConfig
   doubao: ServiceConfig
   kling: ServiceConfig
+  vidu: ServiceConfig
 }>({
   sora: { server: '', key: '', characterServer: '', characterKey: '' },
   veo: { server: '', key: '' },
@@ -65,6 +69,7 @@ const editForm = ref<{
   grokImage: { server: '', key: '' },
   doubao: { server: '', key: '', xiaohuminiServer: '', xiaohuminiKey: '' },
   kling: { server: '', key: '' },
+  vidu: { server: '', key: '' },
 })
 
 // 显示消息
@@ -93,7 +98,7 @@ const loadConfig = async () => {
 }
 
 // 进入编辑模式
-const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling') => {
+const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu') => {
   // 获取完整配置（包含 API Key）
   try {
     const response = await userConfigApi.getFullConfig()
@@ -113,6 +118,8 @@ const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 
       editForm.value.doubao = { ...fullConfig.doubao }
     } else if (service === 'kling') {
       editForm.value.kling = { ...fullConfig.kling }
+    } else if (service === 'vidu') {
+      editForm.value.vidu = { ...fullConfig.vidu }
     }
     
     editMode.value[service] = true
@@ -122,12 +129,12 @@ const enterEditMode = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 
 }
 
 // 取消编辑
-const cancelEdit = (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling') => {
+const cancelEdit = (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu') => {
   editMode.value[service] = false
 }
 
 // 保存配置
-const saveConfig = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling') => {
+const saveConfig = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu') => {
   isSaving.value = true
   try {
     const serviceConfig = editForm.value[service]
@@ -155,12 +162,13 @@ const getServiceName = (service: string): string => {
     grokImage: 'Grok 生图',
     doubao: '豆包',
     kling: '可灵',
+    vidu: 'Vidu',
   }
   return names[service] || service
 }
 
 // 测试连接
-const testConnection = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling') => {
+const testConnection = async (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu') => {
   showMessage(`正在测试 ${getServiceName(service)} 连接...`, 'success')
   // TODO: 实现连接测试
   setTimeout(() => {
@@ -177,6 +185,7 @@ const toggleAllSyncServices = (value: boolean) => {
   syncServices.value.grokImage = value
   syncServices.value.doubao = value
   syncServices.value.kling = value
+  syncServices.value.vidu = value
 }
 
 // 同步默认配置到所有服务
@@ -443,6 +452,9 @@ onMounted(() => {
               </label>
               <label class="checkbox-label">
                 <input v-model="syncServices.kling" type="checkbox" /> 可灵
+              </label>
+              <label class="checkbox-label">
+                <input v-model="syncServices.vidu" type="checkbox" /> Vidu
               </label>
             </div>
           </div>
@@ -796,6 +808,50 @@ onMounted(() => {
               {{ isSaving ? '保存中...' : '💾 保存' }}
             </button>
             <button class="cancel-btn" @click="cancelEdit('kling')">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vidu 配置 -->
+      <div class="config-section">
+        <div class="section-header">
+          <h2>🎬 Vidu 视频生成</h2>
+          <button 
+            v-if="!editMode.vidu" 
+            class="edit-btn"
+            @click="enterEditMode('vidu')"
+          >
+            ✏️ 编辑
+          </button>
+        </div>
+        
+        <div v-if="!editMode.vidu" class="config-display">
+          <div class="config-item">
+            <label>API 地址</label>
+            <span class="value">{{ config.vidu?.server || '(未设置)' }}</span>
+            <span v-if="hasTrailingSlash(config.vidu?.server || '')" class="field-warning">⚠️ API 地址末尾不需要 /，请编辑删除</span>
+          </div>
+          <div class="config-item">
+            <label>API Key</label>
+            <span class="value masked">{{ config.vidu?.key || '(未设置)' }}</span>
+          </div>
+        </div>
+
+        <div v-else class="config-edit">
+          <div class="form-group">
+            <label>API 地址</label>
+            <input v-model="editForm.vidu.server" type="text" placeholder="https://..." />
+            <span v-if="hasTrailingSlash(editForm.vidu.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+          </div>
+          <div class="form-group">
+            <label>API Key</label>
+            <input v-model="editForm.vidu.key" type="text" placeholder="sk-..." />
+          </div>
+          <div class="button-group">
+            <button class="save-btn" :disabled="isSaving" @click="saveConfig('vidu')">
+              {{ isSaving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button class="cancel-btn" @click="cancelEdit('vidu')">取消</button>
           </div>
         </div>
       </div>

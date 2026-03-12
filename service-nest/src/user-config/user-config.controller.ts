@@ -63,8 +63,8 @@ export class UserConfigController {
     this.logger.log(`🔄 Sync default config for userId: ${userId}`)
 
     try {
-      const validServices = (body.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling'])
-        .filter(s => ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling'].includes(s)) as Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling'>
+      const validServices = (body.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling', 'vidu'])
+        .filter(s => ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling', 'vidu'].includes(s)) as Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu'>
 
       await this.userConfigService.syncDefaultToAll(
         userId,
@@ -100,17 +100,17 @@ export class UserConfigController {
     const { userId } = req.user
     this.logger.log(`📝 Update user ${service} config: ${userId}`)
 
-    if (!['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling'].includes(service)) {
+    if (!['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling', 'vidu'].includes(service)) {
       return {
         status: 'error',
-        message: `Invalid service: ${service}. Valid: sora, veo, geminiImage, grok, grokImage, doubao, kling`,
+        message: `Invalid service: ${service}. Valid: sora, veo, geminiImage, grok, grokImage, doubao, kling, vidu`,
       }
     }
 
     try {
       await this.userConfigService.updateUserServiceConfig(
         userId,
-        service as 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling',
+        service as 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu',
         dto,
       )
       const displayConfig = await this.userConfigService.getUserConfigForDisplay(userId)

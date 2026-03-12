@@ -35,6 +35,10 @@ export interface AppConfig {
     server: string
     key: string
   }
+  vidu: {
+    server: string
+    key: string
+  }
   email: {
     smtpServer: string
     smtpPort: number
@@ -82,6 +86,7 @@ export class ConfigService implements OnApplicationBootstrap {
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
           kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
+          vidu: { ...defaults.vidu, ...stored.vidu },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
           qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
@@ -156,6 +161,10 @@ export class ConfigService implements OnApplicationBootstrap {
         server: process.env.DOUBAO_SERVER || '',
         key: process.env.DOUBAO_KEY || '',
       },
+      vidu: {
+        server: process.env.VIDU_SERVER || '',
+        key: process.env.VIDU_KEY || '',
+      },
       email: {
         smtpServer: process.env.SMTP_SERVER || 'smtp.163.com',
         smtpPort: parseInt(process.env.SMTP_PORT || '465', 10),
@@ -196,6 +205,7 @@ export class ConfigService implements OnApplicationBootstrap {
           grokImage: { ...defaults.grokImage, ...stored.grokImage },
           kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
+          vidu: { ...defaults.vidu, ...stored.vidu },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
           qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
@@ -245,6 +255,10 @@ export class ConfigService implements OnApplicationBootstrap {
         server: config.doubao?.server ?? '',
         key: this.maskKey(config.doubao?.key ?? ''),
       },
+      vidu: {
+        server: config.vidu?.server ?? '',
+        key: this.maskKey(config.vidu?.key ?? ''),
+      },
       email: {
         smtpServer: config.email?.smtpServer ?? '',
         smtpPort: config.email?.smtpPort ?? 465,
@@ -287,7 +301,7 @@ export class ConfigService implements OnApplicationBootstrap {
    * 更新单个服务配置
    */
   async updateServiceConfig(
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'email' | 'tutorial' | 'qrcode' | 'footer',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu' | 'email' | 'tutorial' | 'qrcode' | 'footer',
     config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string; content?: string },
   ): Promise<AppConfig> {
     const currentConfig = this.getConfig()
@@ -300,6 +314,7 @@ export class ConfigService implements OnApplicationBootstrap {
     if (!currentConfig.grokImage) currentConfig.grokImage = { server: '', key: '' }
     if (!currentConfig.kling) currentConfig.kling = { server: '', key: '' }
     if (!currentConfig.doubao) currentConfig.doubao = { server: '', key: '' }
+    if (!currentConfig.vidu) currentConfig.vidu = { server: '', key: '' }
     if (!currentConfig.email) currentConfig.email = { smtpServer: 'smtp.163.com', smtpPort: 465, smtpSSL: true, smtpAccount: '', smtpToken: '', smtpFrom: '' }
 
     if (service === 'sora') {
@@ -325,6 +340,9 @@ export class ConfigService implements OnApplicationBootstrap {
     } else if (service === 'doubao') {
       if (config.server !== undefined) currentConfig.doubao.server = config.server
       if (config.key !== undefined) currentConfig.doubao.key = config.key
+    } else if (service === 'vidu') {
+      if (config.server !== undefined) currentConfig.vidu.server = config.server
+      if (config.key !== undefined) currentConfig.vidu.key = config.key
     } else if (service === 'email') {
       if (config.smtpServer !== undefined) currentConfig.email.smtpServer = config.smtpServer
       if (config.smtpPort !== undefined) currentConfig.email.smtpPort = config.smtpPort
@@ -413,6 +431,10 @@ export class ConfigService implements OnApplicationBootstrap {
 
   getDoubaoConfig() {
     return this.getConfig().doubao || { server: '', key: '' }
+  }
+
+  getViduConfig() {
+    return this.getConfig().vidu || { server: '', key: '' }
   }
 
   getEmailConfig() {

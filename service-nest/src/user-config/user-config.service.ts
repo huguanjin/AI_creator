@@ -41,6 +41,10 @@ export interface UserApiConfig {
     xiaohuminiServer: string
     xiaohuminiKey: string
   }
+  vidu: {
+    server: string
+    key: string
+  }
 }
 
 export interface UserConfigDocument {
@@ -123,6 +127,10 @@ export class UserConfigService implements OnApplicationBootstrap {
             xiaohuminiServer: config.doubao?.xiaohuminiServer || '',
             xiaohuminiKey: config.doubao?.xiaohuminiKey || '',
           },
+          vidu: {
+            server: config.vidu?.server || '',
+            key: config.vidu?.key || '',
+          },
         }
       }
     } catch (error) {
@@ -138,6 +146,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: { server: '', key: '' },
       kling: { server: '', key: '' },
       doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
+      vidu: { server: '', key: '' },
     }
   }
 
@@ -199,6 +208,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: { ...defaults.grokImage, ...stored.grokImage },
       kling: { ...defaults.kling, ...stored.kling },
       doubao: { ...defaults.doubao, ...stored.doubao },
+      vidu: { ...defaults.vidu, ...stored.vidu },
     }
   }
 
@@ -242,6 +252,10 @@ export class UserConfigService implements OnApplicationBootstrap {
         xiaohuminiServer: config.doubao?.xiaohuminiServer ?? '',
         xiaohuminiKey: this.maskKey(config.doubao?.xiaohuminiKey ?? ''),
       },
+      vidu: {
+        server: config.vidu?.server ?? '',
+        key: this.maskKey(config.vidu?.key ?? ''),
+      },
     }
   }
 
@@ -273,7 +287,7 @@ export class UserConfigService implements OnApplicationBootstrap {
    */
   async updateUserServiceConfig(
     userId: string,
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu',
     serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string; xiaohuminiServer?: string; xiaohuminiKey?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
@@ -305,6 +319,9 @@ export class UserConfigService implements OnApplicationBootstrap {
       if (serviceConfig.channel !== undefined) config.doubao.channel = serviceConfig.channel
       if (serviceConfig.xiaohuminiServer !== undefined) config.doubao.xiaohuminiServer = serviceConfig.xiaohuminiServer
       if (serviceConfig.xiaohuminiKey !== undefined) config.doubao.xiaohuminiKey = serviceConfig.xiaohuminiKey
+    } else if (service === 'vidu') {
+      if (serviceConfig.server !== undefined) config.vidu.server = serviceConfig.server
+      if (serviceConfig.key !== undefined) config.vidu.key = serviceConfig.key
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')
@@ -361,6 +378,11 @@ export class UserConfigService implements OnApplicationBootstrap {
     return config.doubao
   }
 
+  async getUserViduConfig(userId: string) {
+    const config = await this.getUserConfig(userId)
+    return config.vidu
+  }
+
   /**
    * 将默认 server+key 同步到所有服务配置
    * 用户可选择同步哪些字段（server / key），以及同步到哪些服务
@@ -372,13 +394,13 @@ export class UserConfigService implements OnApplicationBootstrap {
     options?: {
       syncServer?: boolean
       syncKey?: boolean
-      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling'>
+      services?: Array<'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu'>
     },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
     const syncServer = options?.syncServer !== false
     const syncKey = options?.syncKey !== false
-    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'kling', 'doubao']
+    const services = options?.services || ['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'kling', 'doubao', 'vidu']
 
     for (const service of services) {
       if (config[service]) {

@@ -46,6 +46,7 @@ const platformOptions = [
   { label: 'Grok', value: 'grok' },
   { label: '豆包 (Doubao)', value: 'doubao' },
   { label: '可灵 (Kling)', value: 'kling' },
+  { label: 'Vidu', value: 'vidu' },
 ]
 
 const platformLabel: Record<string, string> = {
@@ -54,6 +55,7 @@ const platformLabel: Record<string, string> = {
   grok: 'Grok',
   doubao: '豆包',
   kling: '可灵',
+  vidu: 'Vidu',
 }
 
 const filteredModels = computed(() => {
@@ -345,6 +347,7 @@ onMounted(() => {
               <option value="grok">Grok</option>
               <option value="doubao">豆包 (Doubao)</option>
               <option value="kling">可灵 (Kling)</option>
+              <option value="vidu">Vidu</option>
             </select>
           </div>
 

@@ -190,6 +190,13 @@ export class ModelCatalogService implements OnApplicationBootstrap {
       { platform: 'kling', category: '📦 按量计费组合', name: 'kling-2.6-motion-pro-1080p', value: 'kling-2.6-motion-pro-1080p', sort: 2, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'kling', category: '📦 按量计费组合', name: 'kling-avatar-720p', value: 'kling-avatar-720p', sort: 3, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'kling', category: '📦 按量计费组合', name: 'kling-identify-face', value: 'kling-identify-face', sort: 4, enabled: true, createdAt: now, updatedAt: now },
+
+      // === Vidu ===
+      { platform: 'vidu', category: '⚡ Turbo', name: 'TC-vidu-q2-turbo', value: 'TC-vidu-q2-turbo', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'vidu', category: '⚡ Turbo', name: 'TC-vidu-q3-turbo', value: 'TC-vidu-q3-turbo', sort: 2, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'vidu', category: '🎬 标准', name: 'TC-vidu-q2', value: 'TC-vidu-q2', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'vidu', category: '✨ Pro', name: 'TC-vidu-q2-pro', value: 'TC-vidu-q2-pro', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'vidu', category: '✨ Pro', name: 'TC-vidu-q3-pro', value: 'TC-vidu-q3-pro', sort: 2, enabled: true, createdAt: now, updatedAt: now },
     ]
 
     await col.insertMany(defaults as any[])

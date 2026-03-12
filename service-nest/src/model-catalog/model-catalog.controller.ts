@@ -58,7 +58,7 @@ export class ModelCatalogController {
    */
   @Get('all-platforms')
   async getAllPlatforms() {
-    const platforms = ['sora', 'veo', 'grok', 'doubao', 'kling']
+    const platforms = ['sora', 'veo', 'grok', 'doubao', 'kling', 'vidu']
     const result: Record<string, Record<string, { name: string; value: string }[]>> = {}
 
     for (const platform of platforms) {

@@ -4,13 +4,26 @@ import { Transform } from 'class-transformer'
 /**
  * 创建 Vidu 视频 DTO
  * POST /v1/vidu/create
+ * 支持两个渠道:
+ *   default (测试接口官转接口1): 使用内部 API 路径
+ *   aifast (AIFAST站): 使用 OpenAI Video 格式 /v1/video/generations
  * 支持四种任务类型:
- *   文生视频: /api/v1/video/vidu/text2video
- *   图生视频: /api/v1/video/vidu/img2video
- *   参考生视频: /api/v1/video/vidu/reference2video
- *   首尾帧: /api/v1/video/vidu/start-end2video
+ *   文生视频: text2video / textGenerate
+ *   图生视频: img2video / generate
+ *   参考生视频: reference2video / referenceGenerate
+ *   首尾帧: start-end2video / firstTailGenerate
  */
 export class CreateViduVideoDto {
+  /**
+   * 接口渠道
+   * default: 测试接口官转接口1（原有渠道）
+   * aifast: AIFAST站接口
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['default', 'aifast'])
+  channel?: string
+
   /**
    * 任务类型
    * text2video: 文生视频

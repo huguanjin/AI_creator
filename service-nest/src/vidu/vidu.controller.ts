@@ -33,6 +33,8 @@ export class ViduController {
    * 创建 Vidu 视频
    * POST /v1/vidu/create
    * 支持 multipart/form-data 上传参考图
+   * channel=default: 测试接口官转接口1
+   * channel=aifast: AIFAST站接口
    */
   @Post('create')
   @UseInterceptors(FilesInterceptor('input_reference', 10))
@@ -42,7 +44,8 @@ export class ViduController {
     @Req() req?: any,
   ) {
     const userId = req?.user?.userId || 'unknown'
-    this.logger.log(`📹 Creating Vidu video [${createVideoDto.task_type || 'text2video'}] with model: ${createVideoDto.model}`)
+    const channel = createVideoDto.channel || 'default'
+    this.logger.log(`📹 Creating Vidu video [${channel}] [${createVideoDto.task_type || 'text2video'}] with model: ${createVideoDto.model}`)
     this.logger.log(`📝 Prompt: ${createVideoDto.prompt}`)
     if (files && files.length > 0) {
       this.logger.log(`🖼️ Reference images: ${files.length}`)
@@ -61,7 +64,7 @@ export class ViduController {
         )
       }
 
-      this.logger.log(`✅ Vidu video task created: ${result.id}`)
+      this.logger.log(`✅ Vidu video task created [${channel}]: ${result.id}`)
 
       // 记录任务到数据库
       try {
@@ -75,6 +78,7 @@ export class ViduController {
             duration: createVideoDto.duration,
             aspect_ratio: createVideoDto.aspect_ratio,
             resolution: createVideoDto.resolution,
+            channel,
             hasReferenceImages: files && files.length > 0,
           },
           apiResponse: result,
@@ -106,16 +110,17 @@ export class ViduController {
 
   /**
    * 查询 Vidu 视频任务状态
-   * GET /v1/vidu/query?id=xxx
+   * GET /v1/vidu/query?id=xxx&channel=aifast
    */
   @Get('query')
   async queryVideo(@Query() queryDto: QueryViduVideoDto, @Req() req?: any) {
-    this.logger.log(`🔍 Querying Vidu video task: ${queryDto.id}`)
+    const channel = queryDto.channel || 'default'
+    this.logger.log(`🔍 Querying Vidu video task [${channel}]: ${queryDto.id}`)
     const userId = req?.user?.userId || 'unknown'
 
     try {
-      const result = await this.viduService.queryVideo(queryDto.id, userId)
-      this.logger.log(`📊 Vidu task status: ${result.status}`)
+      const result = await this.viduService.queryVideo(queryDto.id, userId, channel)
+      this.logger.log(`📊 Vidu task status [${channel}]: ${result.status}`)
 
       // 更新数据库中的任务状态
       try {

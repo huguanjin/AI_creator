@@ -393,12 +393,14 @@ export interface CreateViduVideoParams {
   images?: string[]
   subjects?: Array<{ name: string }>
   off_peak?: boolean
+  channel?: 'default' | 'aifast'
 }
 
 export const viduApi = {
   // 创建视频（支持参考图上传）
   createVideo: (params: CreateViduVideoParams, files?: File[]) => {
     const formData = new FormData()
+    if (params.channel) formData.append('channel', params.channel)
     formData.append('task_type', params.task_type)
     formData.append('model', params.model)
     formData.append('prompt', params.prompt)
@@ -432,8 +434,8 @@ export const viduApi = {
   },
 
   // 查询视频状态
-  queryVideo: (id: string) =>
-    api.get(`/v1/vidu/query?id=${encodeURIComponent(id)}`),
+  queryVideo: (id: string, channel?: string) =>
+    api.get(`/v1/vidu/query?id=${encodeURIComponent(id)}${channel ? `&channel=${encodeURIComponent(channel)}` : ''}`),
 }
 
 // ============ Gemini Image API ============

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { soraApi, veoApi, grokApi } from '@/api'
+import { soraApi, veoApi, grokApi, viduApi } from '@/api'
 
 // 任务 ID 和类型
 const taskId = ref('')
-const taskType = ref<'sora' | 'veo' | 'grok'>('sora')
+const taskType = ref<'sora' | 'veo' | 'grok' | 'vidu'>('sora')
+const viduChannel = ref<'aifast' | 'default'>('aifast')
 const isLoading = ref(false)
 const errorMsg = ref('')
 
@@ -62,6 +63,7 @@ const queryTask = async () => {
       sora: (id) => soraApi.queryVideo(id),
       veo: (id) => veoApi.queryVideo(id),
       grok: (id) => grokApi.queryVideo(id),
+      vidu: (id) => viduApi.queryVideo(id, viduChannel.value),
     }
     const queryFn = queryMap[taskType.value] || queryMap.sora
     
@@ -178,6 +180,24 @@ onUnmounted(() => {
               <input type="radio" v-model="taskType" value="grok" />
               <span>Grok</span>
             </label>
+            <label class="type-option">
+              <input type="radio" v-model="taskType" value="vidu" />
+              <span>Vidu</span>
+            </label>
+          </div>
+          <!-- Vidu 接口选择 -->
+          <div v-if="taskType === 'vidu'" class="channel-selector">
+            <label>接口选择</label>
+            <div class="type-selector">
+              <label class="type-option">
+                <input type="radio" v-model="viduChannel" value="aifast" />
+                <span>AIFAST站</span>
+              </label>
+              <label class="type-option">
+                <input type="radio" v-model="viduChannel" value="default" />
+                <span>测试接口官转接口1</span>
+              </label>
+            </div>
           </div>
         </div>
         <div class="form-group">
@@ -354,6 +374,19 @@ onUnmounted(() => {
 
 .type-option input[type="radio"] {
   cursor: pointer;
+}
+
+.channel-selector {
+  margin-top: 8px;
+  padding-left: 8px;
+  border-left: 3px solid var(--primary);
+}
+
+.channel-selector label:first-child {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  display: block;
 }
 
 .input-group {

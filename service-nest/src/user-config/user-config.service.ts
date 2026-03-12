@@ -44,6 +44,7 @@ export interface UserApiConfig {
   vidu: {
     server: string
     key: string
+    channel: string
   }
 }
 
@@ -130,6 +131,7 @@ export class UserConfigService implements OnApplicationBootstrap {
           vidu: {
             server: config.vidu?.server || '',
             key: config.vidu?.key || '',
+            channel: config.vidu?.channel || 'aifast',
           },
         }
       }
@@ -146,7 +148,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: { server: '', key: '' },
       kling: { server: '', key: '' },
       doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
-      vidu: { server: '', key: '' },
+      vidu: { server: '', key: '', channel: 'aifast' },
     }
   }
 
@@ -255,6 +257,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       vidu: {
         server: config.vidu?.server ?? '',
         key: this.maskKey(config.vidu?.key ?? ''),
+        channel: config.vidu?.channel ?? 'aifast',
       },
     }
   }
@@ -322,6 +325,7 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'vidu') {
       if (serviceConfig.server !== undefined) config.vidu.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.vidu.key = serviceConfig.key
+      if (serviceConfig.channel !== undefined) config.vidu.channel = serviceConfig.channel
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')

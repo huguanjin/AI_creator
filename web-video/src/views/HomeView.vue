@@ -130,6 +130,7 @@ const klingReferenceInput = ref<HTMLInputElement | null>(null)
 
 // Vidu 表单
 const viduForm = ref({
+  channel: 'aifast' as 'default' | 'aifast',
   task_type: 'text2video' as 'text2video' | 'img2video' | 'reference2video' | 'start-end2video',
   model: 'TC-vidu-q2',
   prompt: '',
@@ -185,6 +186,10 @@ const loadApiConfig = async () => {
     if (data.doubao?.channel) {
       doubaoForm.value.channel = data.doubao.channel as 'aifast' | 'xiaohumini'
     }
+    // Vidu 渠道偏好
+    if (data.vidu?.channel) {
+      viduForm.value.channel = data.vidu.channel as 'default' | 'aifast'
+    }
   } catch (e) {
     console.error('加载 API 配置失败', e)
   }
@@ -208,11 +213,20 @@ watch(() => doubaoForm.value.channel, async (newChannel) => {
   }
 })
 
+// Vidu 渠道变更时自动保存到用户配置
+watch(() => viduForm.value.channel, async (newChannel) => {
+  try {
+    await userConfigApi.updateServiceConfig('vidu', { channel: newChannel })
+  } catch (e) {
+    console.error('保存Vidu渠道偏好失败', e)
+  }
+})
+
 const saveApiConfig = async () => {
-  const svc = platform.value
+  const svc: string = platform.value
   apiConfigSaving.value = true
   try {
-    await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
+    await userConfigApi.updateServiceConfig(svc as any, apiConfig.value[svc])
     apiConfigMsg.value = '✅ 保存成功'
     setTimeout(() => { apiConfigMsg.value = '' }, 2000)
   } catch (e: any) {
@@ -405,6 +419,7 @@ const createVideo = async () => {
     else if (platform.value === 'vidu') {
       // Vidu
       const viduParams: any = {
+        channel: viduForm.value.channel,
         task_type: viduForm.value.task_type,
         model: viduForm.value.model,
         prompt: viduForm.value.prompt,
@@ -432,6 +447,7 @@ const createVideo = async () => {
         progress: 0,
         created_at: Date.now(),
         platform: 'vidu',
+        channel: viduForm.value.channel,
       }
     }
     else {
@@ -652,7 +668,7 @@ const pollTaskStatus = async (taskId: string, taskPlatform: 'sora' | 'veo' | 'gr
             : taskPlatform === 'kling'
               ? await klingApi.queryVideo(taskId)
               : taskPlatform === 'vidu'
-                ? await viduApi.queryVideo(taskId)
+                ? await viduApi.queryVideo(taskId, taskChannel)
                 : await grokApi.queryVideo(taskId, taskChannel)
 
       const data = response.data
@@ -1750,6 +1766,14 @@ onMounted(async () => {
 
         <!-- Vidu 表单 -->
         <template v-else>
+          <div class="form-group">
+            <label class="form-label">接口通道</label>
+            <select v-model="viduForm.channel" class="form-select">
+              <option value="default">测试接口官转接口1</option>
+              <option value="aifast">AIFAST站</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label class="form-label">任务类型</label>
             <select v-model="viduForm.task_type" class="form-select">

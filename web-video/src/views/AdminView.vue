@@ -57,6 +57,11 @@ const taskPageSize = ref(20)
 const taskFilterUsername = ref('')
 const taskFilterPlatform = ref('')
 const taskFilterStatus = ref('')
+const expandedTaskId = ref<string | null>(null)
+
+const toggleTaskDetail = (taskId: string) => {
+  expandedTaskId.value = expandedTaskId.value === taskId ? null : taskId
+}
 // 默认当天日期
 const todayStr = new Date().toISOString().slice(0, 10)
 const taskStartDate = ref(todayStr)
@@ -432,22 +437,33 @@ const copyPrompt = async (text: string) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="task in taskList" :key="task._id">
-              <td class="username-cell">{{ task.username }}</td>
-              <td><span class="platform-badge">{{ task.platform }}</span></td>
-              <td class="model-cell">{{ task.model }}</td>
-              <td class="prompt-cell" :title="task.prompt">
-                {{ task.prompt?.slice(0, 40) }}{{ task.prompt?.length > 40 ? '...' : '' }}
-                <button v-if="task.prompt" class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button>
-              </td>
-              <td><span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span></td>
-              <td>{{ formatTime(task.createdAt) }}</td>
-              <td>
-                <a v-if="task.video_url" :href="task.video_url" target="_blank" class="video-link">查看视频</a>
-                <span v-else-if="task.error" class="error-text" :title="task.error">失败</span>
-                <span v-else class="text-muted">-</span>
-              </td>
-            </tr>
+            <template v-for="task in taskList" :key="task._id">
+              <tr :class="{ 'row-expanded': expandedTaskId === task._id }">
+                <td class="username-cell">{{ task.username }}</td>
+                <td><span class="platform-badge">{{ task.platform }}</span></td>
+                <td class="model-cell">{{ task.model }}</td>
+                <td class="prompt-cell" :title="task.prompt">
+                  {{ task.prompt?.slice(0, 40) }}{{ task.prompt?.length > 40 ? '...' : '' }}
+                  <button v-if="task.prompt" class="copy-btn" @click.stop="copyPrompt(task.prompt)" title="复制提示词">📋</button>
+                </td>
+                <td><span class="status-badge" :class="task.status">{{ statusText[task.status] || task.status }}</span></td>
+                <td>{{ formatTime(task.createdAt) }}</td>
+                <td>
+                  <div class="action-btns">
+                    <button class="btn btn-small" @click="toggleTaskDetail(task._id)">
+                      {{ expandedTaskId === task._id ? '收起' : '明细' }}
+                    </button>
+                    <a v-if="task.video_url" :href="task.video_url" target="_blank" class="video-link">查看视频</a>
+                    <span v-else-if="task.error" class="error-text" :title="task.error">失败</span>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="expandedTaskId === task._id" class="task-detail-row">
+                <td colspan="7" class="task-detail-cell">
+                  <pre class="task-detail-json">{{ JSON.stringify(task, null, 2) }}</pre>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -857,6 +873,26 @@ const copyPrompt = async (text: string) => {
 
 .copy-btn:hover {
   opacity: 1;
+}
+
+/* ============ 任务明细展开 ============ */
+.task-detail-row .task-detail-cell {
+  padding: 0 16px 16px;
+  background: #1a1a2e;
+}
+
+.task-detail-json {
+  background: #0d0d1a;
+  color: #a5d6ff;
+  padding: 14px 18px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 400px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
 }
 
 /* ============ 卡片 ============ */

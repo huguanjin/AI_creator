@@ -16,4 +16,10 @@ export class CreateVideoTaskDto {
 
   /** API 创建返回的原始响应 */
   apiResponse?: Record<string, any>
+
+  /** 提交任务所用的 API 地址 */
+  apiServer?: string
+
+  /** 提交任务所用的 API 密钥（脱敏） */
+  apiKeyMasked?: string
 }

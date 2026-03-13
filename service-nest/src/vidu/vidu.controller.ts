@@ -66,6 +66,11 @@ export class ViduController {
 
       this.logger.log(`✅ Vidu video task created [${channel}]: ${result.id}`)
 
+      // 获取当前使用的 API 配置
+      const apiConfig = await this.viduService.getUserViduConfig(userId)
+      const apiServer = apiConfig.server
+      const apiKeyMasked = apiConfig.key ? apiConfig.key.slice(0, 6) + '****' + apiConfig.key.slice(-4) : ''
+
       // 记录任务到数据库
       try {
         await this.videoTasksService.createTask(userId, {
@@ -82,6 +87,8 @@ export class ViduController {
             hasReferenceImages: files && files.length > 0,
           },
           apiResponse: result,
+          apiServer,
+          apiKeyMasked,
         })
       } catch (dbErr) {
         this.logger.warn(`⚠️ Failed to save Vidu task to DB: ${dbErr.message}`)

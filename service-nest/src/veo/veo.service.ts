@@ -21,7 +21,7 @@ export class VeoService {
   /**
    * 获取用户级 VEO 配置（优先用户配置，回退全局配置）
    */
-  private async getUserVeoConfig(userId: string) {
+  async getUserVeoConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
       if (userConfig.veo?.server) {

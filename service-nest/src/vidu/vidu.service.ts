@@ -28,7 +28,7 @@ export class ViduService {
    * 获取用户级 Vidu 配置（优先用户配置，回退全局配置）
    * 两个渠道共用同一套 API 配置
    */
-  private async getUserViduConfig(userId: string) {
+  async getUserViduConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
       if (userConfig.vidu?.server) {
@@ -319,15 +319,23 @@ export class ViduService {
 
   /**
    * 测试接口官转接口1 - 查询视频
-   * GET /api/v1/video/vidu/tasks/:id/creations
+   * GET /api/v1/video/vidu/tasks/:id/creations  （纯数字 int64 ID）
+   * GET /api/v1/video/generations/{id}           （字符串 ID，如 img2video 返回的 task_xxx）
    */
   private async queryVideoDefault(taskId: string, userId: string): Promise<any> {
     const config = await this.getUserViduConfig(userId)
 
-    this.logger.log(`📤 [测试接口官转接口1] Querying Vidu task: ${taskId}`)
+    // int64 纯数字 ID 使用 tasks/:id/creations 端点
+    // 非数字 ID（如 img2video 返回的 task_xxx）使用 /video/generations/{id} 端点
+    const isNumericId = /^\d+$/.test(taskId)
+    const queryUrl = isNumericId
+      ? `${config.server}/api/v1/video/vidu/tasks/${encodeURIComponent(taskId)}/creations`
+      : `${config.server}/api/v1/video/generations/${encodeURIComponent(taskId)}`
+
+    this.logger.log(`📤 [测试接口官转接口1] Querying Vidu task: ${taskId} (${isNumericId ? 'numeric' : 'string'} ID)`)
 
     const response = await axios.get(
-      `${config.server}/api/v1/video/vidu/tasks/${encodeURIComponent(taskId)}/creations`,
+      queryUrl,
       {
         headers: {
           'Authorization': `Bearer ${config.key}`,

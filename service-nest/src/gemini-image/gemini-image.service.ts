@@ -22,6 +22,10 @@ interface ImageTask {
   }>
   error?: string
   createdAt: number
+  /** 提交任务所用的 API 地址 */
+  apiServer?: string
+  /** 提交任务所用的 API 密钥（脱敏） */
+  apiKeyMasked?: string
 }
 
 @Injectable()
@@ -147,6 +151,17 @@ export class GeminiImageService {
 
     try {
       const model = dto.model || 'gemini-3-pro-image-preview'
+
+      // 记录当前使用的 API 配置
+      if (this.isGrokImageModel(model)) {
+        const cfg = await this.getUserGrokImageConfig(userId)
+        task.apiServer = cfg.server
+        task.apiKeyMasked = cfg.key ? cfg.key.slice(0, 6) + '****' + cfg.key.slice(-4) : ''
+      } else {
+        const cfg = await this.getUserGeminiImageConfig(userId)
+        task.apiServer = cfg.server
+        task.apiKeyMasked = cfg.key ? cfg.key.slice(0, 6) + '****' + cfg.key.slice(-4) : ''
+      }
 
       let rawImages: Array<{ mimeType: string; data: string }>
 
@@ -393,6 +408,19 @@ export class GeminiImageService {
 
     const status = savedImages.length > 0 ? 'completed' : 'failed'
 
+    // 获取当前使用的 API 配置
+    let apiServer = ''
+    let apiKeyMasked = ''
+    if (this.isGrokImageModel(model)) {
+      const cfg = await this.getUserGrokImageConfig(userId)
+      apiServer = cfg.server
+      apiKeyMasked = cfg.key ? cfg.key.slice(0, 6) + '****' + cfg.key.slice(-4) : ''
+    } else {
+      const cfg = await this.getUserGeminiImageConfig(userId)
+      apiServer = cfg.server
+      apiKeyMasked = cfg.key ? cfg.key.slice(0, 6) + '****' + cfg.key.slice(-4) : ''
+    }
+
     // 同步模式也记录到 MongoDB image_tasks
     const task: ImageTask = {
       taskId,
@@ -405,6 +433,8 @@ export class GeminiImageService {
       images: savedImages.length > 0 ? savedImages : undefined,
       error: savedImages.length === 0 ? 'No images generated' : undefined,
       createdAt: Date.now(),
+      apiServer,
+      apiKeyMasked,
     }
     await this.saveTask(task)
     this.logger.log(`📝 Sync task ${taskId} saved to MongoDB (${status})`)
@@ -448,6 +478,8 @@ export class GeminiImageService {
       images: doc.images,
       error: doc.error,
       createdAt: doc.createdAt,
+      apiServer: doc.apiServer,
+      apiKeyMasked: doc.apiKeyMasked,
     }
   }
 }

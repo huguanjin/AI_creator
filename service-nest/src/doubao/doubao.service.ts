@@ -21,7 +21,7 @@ export class DoubaoService {
   /**
    * 获取用户级豆包配置（优先用户配置，回退全局配置）
    */
-  private async getUserDoubaoConfig(userId: string) {
+  async getUserDoubaoConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
       if (userConfig.doubao?.server || userConfig.doubao?.xiaohuminiServer) {
@@ -37,7 +37,7 @@ export class DoubaoService {
    * 根据渠道获取对应的 server/key
    * xiaohumini 渠道优先使用 xiaohuminiServer/xiaohuminiKey，回退到 server/key
    */
-  private getChannelConfig(config: any, channel: string): { server: string; key: string } {
+  getChannelConfig(config: any, channel: string): { server: string; key: string } {
     if (channel === 'xiaohumini') {
       return {
         server: config.xiaohuminiServer || config.server,

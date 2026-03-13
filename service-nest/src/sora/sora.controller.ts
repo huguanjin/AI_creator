@@ -52,6 +52,11 @@ export class SoraController {
       const result = await this.soraService.createVideo(createVideoDto, files, userId)
       this.logger.log(`✅ Video task created: ${result.id}`)
 
+      // 获取当前使用的 API 配置
+      const apiConfig = await this.soraService.getUserSoraConfig(userId)
+      const apiServer = apiConfig.server
+      const apiKeyMasked = apiConfig.key ? apiConfig.key.slice(0, 6) + '****' + apiConfig.key.slice(-4) : ''
+
       // 记录任务到数据库
       try {
         await this.videoTasksService.createTask(userId, {
@@ -65,6 +70,8 @@ export class SoraController {
             hasReferenceImages: files && files.length > 0,
           },
           apiResponse: result,
+          apiServer,
+          apiKeyMasked,
         })
       } catch (dbErr) {
         this.logger.warn(`⚠️ Failed to save task to DB: ${dbErr.message}`)

@@ -21,7 +21,7 @@ export class KlingService {
   /**
    * 获取用户级可灵配置（优先用户配置，回退全局配置）
    */
-  private async getUserKlingConfig(userId: string) {
+  async getUserKlingConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
       if (userConfig.kling?.server) {

@@ -74,6 +74,12 @@ export class DoubaoController {
       )
       this.logger.log(`✅ Doubao video task created: ${result.id}`)
 
+      // 获取当前使用的 API 配置
+      const fullConfig = await this.doubaoService.getUserDoubaoConfig(userId)
+      const channelConfig = this.doubaoService.getChannelConfig(fullConfig, channel)
+      const apiServer = channelConfig.server
+      const apiKeyMasked = channelConfig.key ? channelConfig.key.slice(0, 6) + '****' + channelConfig.key.slice(-4) : ''
+
       // 记录任务到数据库
       try {
         await this.videoTasksService.createTask(userId, {
@@ -91,6 +97,8 @@ export class DoubaoController {
             hasReferenceImages: referenceFiles && referenceFiles.length > 0,
           },
           apiResponse: result,
+          apiServer,
+          apiKeyMasked,
         })
       } catch (dbErr) {
         this.logger.warn(`⚠️ Failed to save Doubao task to DB: ${dbErr.message}`)

@@ -45,6 +45,12 @@ export interface VideoTaskDocument {
   /** 最近一次查询 API 的原始响应 */
   lastQueryResponse?: Record<string, any>
 
+  /** 提交任务所用的 API 地址 */
+  apiServer?: string
+
+  /** 提交任务所用的 API 密钥（脱敏） */
+  apiKeyMasked?: string
+
   /** 创建时间戳 */
   createdAt: number
 
@@ -93,6 +99,8 @@ export class VideoTasksService implements OnApplicationBootstrap {
       model: dto.model,
       prompt: dto.prompt,
       params: dto.params || {},
+      apiServer: dto.apiServer,
+      apiKeyMasked: dto.apiKeyMasked,
       status: 'queued',
       progress: 0,
       createdAt: now,

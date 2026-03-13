@@ -68,6 +68,11 @@ export class GrokVideoController {
 
       this.logger.log(`✅ Grok video task created: ${result.id}`)
 
+      // 获取当前使用的 API 配置
+      const apiConfig = await this.grokVideoService.getUserGrokConfig(userId)
+      const apiServer = apiConfig.server
+      const apiKeyMasked = apiConfig.key ? apiConfig.key.slice(0, 6) + '****' + apiConfig.key.slice(-4) : ''
+
       // 记录任务到数据库
       try {
         await this.videoTasksService.createTask(userId, {
@@ -83,6 +88,8 @@ export class GrokVideoController {
             hasReferenceImages: files && files.length > 0,
           },
           apiResponse: result,
+          apiServer,
+          apiKeyMasked,
         })
       } catch (dbErr) {
         this.logger.warn(`⚠️ Failed to save Grok task to DB: ${dbErr.message}`)

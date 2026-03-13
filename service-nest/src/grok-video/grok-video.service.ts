@@ -31,7 +31,7 @@ export class GrokVideoService {
   /**
    * 获取用户级 Grok 配置（优先用户配置，回退全局配置）
    */
-  private async getUserGrokConfig(userId: string) {
+  async getUserGrokConfig(userId: string) {
     try {
       const userConfig = await this.userConfigService.getUserConfig(userId)
       if (userConfig.grok?.server) {

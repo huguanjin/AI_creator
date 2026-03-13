@@ -78,6 +78,11 @@ export class KlingController {
 
       this.logger.log(`✅ Kling video task created: ${result.id}`)
 
+      // 获取当前使用的 API 配置
+      const apiConfig = await this.klingService.getUserKlingConfig(userId)
+      const apiServer = apiConfig.server
+      const apiKeyMasked = apiConfig.key ? apiConfig.key.slice(0, 6) + '****' + apiConfig.key.slice(-4) : ''
+
       // 记录任务到数据库
       try {
         let metadata: any = {}
@@ -99,6 +104,8 @@ export class KlingController {
             scene_type: metadata.scene_type,
           },
           apiResponse: result,
+          apiServer,
+          apiKeyMasked,
         })
       } catch (dbErr) {
         this.logger.warn(`⚠️ Failed to save Kling task to DB: ${dbErr.message}`)

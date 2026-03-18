@@ -225,7 +225,12 @@ export class GeminiImageService {
     const response = await httpClient.post(`/v1beta/models/${model}:generateContent`, payload)
     this.logger.log(`✅ Gemini API response received`)
 
-    return this.extractImages(response.data)
+    const images = this.extractImages(response.data)
+    if (images.length === 0) {
+      this.logGeminiNoImageDiagnostics(response.data, model, dto.prompt)
+    }
+
+    return images
   }
 
   /**
@@ -342,6 +347,48 @@ export class GeminiImageService {
     }
 
     return images
+  }
+
+  /**
+   * 0 图场景下输出 Gemini 响应诊断信息（阻断原因 + 候选摘要）
+   */
+  private logGeminiNoImageDiagnostics(responseData: any, model: string, prompt: string): void {
+    try {
+      const promptFeedback = responseData?.promptFeedback || {}
+      const blockReason = promptFeedback?.blockReason || promptFeedback?.block_reason || 'UNKNOWN'
+      const safetyRatings = promptFeedback?.safetyRatings || promptFeedback?.safety_ratings || []
+
+      const candidateSummaries = (responseData?.candidates || []).map((candidate: any, index: number) => {
+        const finishReason = candidate?.finishReason || candidate?.finish_reason || 'UNKNOWN'
+        const parts = candidate?.content?.parts || []
+
+        const partSummary = parts.slice(0, 5).map((part: any) => {
+          const inlineData = part?.inlineData || part?.inline_data
+          if (inlineData?.data) {
+            return '[IMAGE]'
+          }
+          if (typeof part?.text === 'string') {
+            const text = part.text.replace(/\s+/g, ' ').trim()
+            return text ? `[TEXT] ${text.slice(0, 120)}` : '[TEXT]'
+          }
+          return '[OTHER]'
+        })
+
+        return {
+          index,
+          finishReason,
+          partCount: parts.length,
+          parts: partSummary,
+        }
+      })
+
+      this.logger.warn(`⚠️ Gemini returned 0 images. model=${model}`)
+      this.logger.warn(`⚠️ Prompt preview: ${prompt?.slice(0, 100) || ''}`)
+      this.logger.warn(`⚠️ Prompt feedback: ${JSON.stringify({ blockReason, safetyRatings })}`)
+      this.logger.warn(`⚠️ Candidate summary: ${JSON.stringify(candidateSummaries)}`)
+    } catch (error: any) {
+      this.logger.warn(`⚠️ Failed to log Gemini no-image diagnostics: ${error?.message || error}`)
+    }
   }
 
   /**

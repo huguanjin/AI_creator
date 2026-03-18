@@ -91,6 +91,12 @@ const router = createRouter({
       name: 'admin-models',
       component: () => import('@/views/AdminModelCatalogView.vue'),
       meta: { requiresAdmin: true },
+    },
+    {
+      path: '/admin/prompt-templates',
+      name: 'admin-prompt-templates',
+      component: () => import('@/views/AdminPromptTemplateView.vue'),
+      meta: { requiresAdmin: true },
     }
   ]
 })

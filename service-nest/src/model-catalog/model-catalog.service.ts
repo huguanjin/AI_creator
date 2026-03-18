@@ -197,6 +197,12 @@ export class ModelCatalogService implements OnApplicationBootstrap {
       { platform: 'vidu', category: '🎬 标准', name: 'TC-vidu-q2', value: 'TC-vidu-q2', sort: 1, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'vidu', category: '✨ Pro', name: 'TC-vidu-q2-pro', value: 'TC-vidu-q2-pro', sort: 1, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'vidu', category: '✨ Pro', name: 'TC-vidu-q3-pro', value: 'TC-vidu-q3-pro', sort: 2, enabled: true, createdAt: now, updatedAt: now },
+
+      // === 提示词润色 Prompt Polish ===
+      { platform: 'promptPolish', category: '🚀 Gemini 2.5', name: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'promptPolish', category: '🚀 Gemini 2.5', name: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash', sort: 2, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'promptPolish', category: '⚡ Gemini 2.0', name: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'promptPolish', category: '⚡ Gemini 2.0', name: 'Gemini 2.0 Flash Lite', value: 'gemini-2.0-flash-lite', sort: 2, enabled: true, createdAt: now, updatedAt: now },
     ]
 
     await col.insertMany(defaults as any[])

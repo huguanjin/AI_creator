@@ -39,6 +39,11 @@ export interface AppConfig {
     server: string
     key: string
   }
+  promptPolish: {
+    server: string
+    key: string
+    systemPrompt: string
+  }
   email: {
     smtpServer: string
     smtpPort: number
@@ -87,6 +92,7 @@ export class ConfigService implements OnApplicationBootstrap {
           kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
           vidu: { ...defaults.vidu, ...stored.vidu },
+          promptPolish: { ...defaults.promptPolish, ...stored.promptPolish },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
           qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
@@ -165,6 +171,19 @@ export class ConfigService implements OnApplicationBootstrap {
         server: process.env.VIDU_SERVER || '',
         key: process.env.VIDU_KEY || '',
       },
+      promptPolish: {
+        server: process.env.PROMPT_POLISH_SERVER || '',
+        key: process.env.PROMPT_POLISH_KEY || '',
+        systemPrompt: `你是一个专业的AI绘画提示词优化专家。用户会给你一个简单的图片描述，请你将其优化为更详细、更专业的AI绘画提示词。
+
+优化规则：
+1. 保持用户原始意图不变
+2. 添加更多细节描述（光影、材质、风格、氛围等）
+3. 使用英文输出，因为大多数AI绘画模型对英文效果更好
+4. 如果用户输入是中文，先理解含义，然后输出英文提示词
+5. 提示词长度适中，不要过长
+6. 直接输出优化后的提示词，不要有任何解释或额外内容`,
+      },
       email: {
         smtpServer: process.env.SMTP_SERVER || 'smtp.163.com',
         smtpPort: parseInt(process.env.SMTP_PORT || '465', 10),
@@ -206,6 +225,7 @@ export class ConfigService implements OnApplicationBootstrap {
           kling: { ...defaults.kling, ...stored.kling },
           doubao: { ...defaults.doubao, ...stored.doubao },
           vidu: { ...defaults.vidu, ...stored.vidu },
+          promptPolish: { ...defaults.promptPolish, ...stored.promptPolish },
           email: { ...defaults.email, ...stored.email },
           tutorialUrl: stored.tutorialUrl ?? defaults.tutorialUrl,
           qrcodeUrl: stored.qrcodeUrl ?? defaults.qrcodeUrl,
@@ -259,6 +279,11 @@ export class ConfigService implements OnApplicationBootstrap {
         server: config.vidu?.server ?? '',
         key: this.maskKey(config.vidu?.key ?? ''),
       },
+      promptPolish: {
+        server: config.promptPolish?.server ?? '',
+        key: this.maskKey(config.promptPolish?.key ?? ''),
+        systemPrompt: config.promptPolish?.systemPrompt ?? '',
+      },
       email: {
         smtpServer: config.email?.smtpServer ?? '',
         smtpPort: config.email?.smtpPort ?? 465,
@@ -301,7 +326,7 @@ export class ConfigService implements OnApplicationBootstrap {
    * 更新单个服务配置
    */
   async updateServiceConfig(
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu' | 'email' | 'tutorial' | 'qrcode' | 'footer',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu' | 'promptPolish' | 'email' | 'tutorial' | 'qrcode' | 'footer',
     config: { server?: string; key?: string; characterServer?: string; characterKey?: string; smtpServer?: string; smtpPort?: number; smtpSSL?: boolean; smtpAccount?: string; smtpToken?: string; smtpFrom?: string; url?: string; content?: string },
   ): Promise<AppConfig> {
     const currentConfig = this.getConfig()
@@ -315,6 +340,7 @@ export class ConfigService implements OnApplicationBootstrap {
     if (!currentConfig.kling) currentConfig.kling = { server: '', key: '' }
     if (!currentConfig.doubao) currentConfig.doubao = { server: '', key: '' }
     if (!currentConfig.vidu) currentConfig.vidu = { server: '', key: '' }
+    if (!currentConfig.promptPolish) currentConfig.promptPolish = { server: '', key: '', systemPrompt: '' }
     if (!currentConfig.email) currentConfig.email = { smtpServer: 'smtp.163.com', smtpPort: 465, smtpSSL: true, smtpAccount: '', smtpToken: '', smtpFrom: '' }
 
     if (service === 'sora') {
@@ -343,6 +369,9 @@ export class ConfigService implements OnApplicationBootstrap {
     } else if (service === 'vidu') {
       if (config.server !== undefined) currentConfig.vidu.server = config.server
       if (config.key !== undefined) currentConfig.vidu.key = config.key
+    } else if (service === 'promptPolish') {
+      if (config.server !== undefined) currentConfig.promptPolish.server = config.server
+      if (config.key !== undefined) currentConfig.promptPolish.key = config.key
     } else if (service === 'email') {
       if (config.smtpServer !== undefined) currentConfig.email.smtpServer = config.smtpServer
       if (config.smtpPort !== undefined) currentConfig.email.smtpPort = config.smtpPort
@@ -435,6 +464,10 @@ export class ConfigService implements OnApplicationBootstrap {
 
   getViduConfig() {
     return this.getConfig().vidu || { server: '', key: '' }
+  }
+
+  getPromptPolishConfig() {
+    return this.getConfig().promptPolish || { server: '', key: '' }
   }
 
   getEmailConfig() {

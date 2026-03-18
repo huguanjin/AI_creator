@@ -954,4 +954,54 @@ export const modelCatalogApi = {
     ),
 }
 
+// ============ Prompt Template API ============
+
+export interface PromptTemplateItem {
+  _id: string
+  name: string
+  content: string
+  category: string
+  sort: number
+  enabled: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+export const promptTemplateApi = {
+  // 获取启用的模板列表（用户使用）
+  getEnabled: () =>
+    api.get<{ status: string; data: PromptTemplateItem[] }>('/v1/prompt-template'),
+
+  // 管理员获取全部模板
+  getAll: () =>
+    api.get<{ status: string; data: PromptTemplateItem[] }>('/v1/prompt-template/all'),
+
+  // 管理员创建模板
+  create: (data: { name: string; content: string; category?: string; sort?: number; enabled?: boolean }) =>
+    api.post<{ status: string; data: PromptTemplateItem }>('/v1/prompt-template', data),
+
+  // 管理员更新模板
+  update: (id: string, data: Partial<{ name: string; content: string; category: string; sort: number; enabled: boolean }>) =>
+    api.put<{ status: string; data: PromptTemplateItem }>(`/v1/prompt-template/${encodeURIComponent(id)}`, data),
+
+  // 管理员删除模板
+  delete: (id: string) =>
+    api.delete<{ status: string; message: string }>(`/v1/prompt-template/${encodeURIComponent(id)}`),
+
+  // 管理员切换启用/禁用
+  toggleEnabled: (id: string) =>
+    api.put<{ status: string; data: PromptTemplateItem }>(`/v1/prompt-template/${encodeURIComponent(id)}/toggle`),
+}
+
+// ============ Prompt Polish API ============
+
+export const promptPolishApi = {
+  // 润色提示词（非流式）
+  polish: (prompt: string, model?: string) =>
+    api.post<{ status: string; data: { polishedPrompt: string } }>('/v1/prompt-polish', { prompt, model }),
+
+  // 润色提示词（SSE 流式）- 返回 EventSource URL
+  getStreamUrl: () => `${API_BASE}/v1/prompt-polish/stream`,
+}
+
 export default api

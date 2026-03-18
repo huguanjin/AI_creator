@@ -345,6 +345,14 @@ const copyPrompt = async (text: string) => {
 
 <template>
   <div class="admin">
+    <!-- 快捷导航 -->
+    <div class="admin-nav">
+      <router-link to="/admin/feedback" class="nav-link">📬 反馈管理</router-link>
+      <router-link to="/admin/announcements" class="nav-link">📢 公告管理</router-link>
+      <router-link to="/admin/models" class="nav-link">🤖 模型目录</router-link>
+      <router-link to="/admin/prompt-templates" class="nav-link">📝 提示词模板</router-link>
+    </div>
+
     <!-- 统计概览 -->
     <div class="stats-cards" v-if="stats">
       <div class="stat-card">
@@ -746,6 +754,32 @@ const copyPrompt = async (text: string) => {
   padding: 20px;
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* ============ 快捷导航 ============ */
+.admin-nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: #2a2a3e;
+  color: #c4b5fd;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover {
+  background: #3a3a4e;
+  color: #d4c5fd;
 }
 
 /* ============ 统计卡片 ============ */

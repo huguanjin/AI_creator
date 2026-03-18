@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { geminiImageApi, userConfigApi, type GeminiImageResult } from '@/api'
+import { geminiImageApi, userConfigApi, promptTemplateApi, modelCatalogApi, type GeminiImageResult, type PromptTemplateItem, type ModelCatalogGrouped } from '@/api'
 
 const isLoading = ref(false)
 const imageForm = ref({
@@ -12,6 +12,119 @@ const imageForm = ref({
   size: '1024x1024' as string,
   n: 1,
 })
+
+// 提示词模板相关
+const promptTemplates = ref<PromptTemplateItem[]>([])
+const selectedTemplate = ref('')
+const showTemplateDropdown = ref(false)
+
+// 提示词润色相关
+const polishModels = ref<ModelCatalogGrouped>({})
+const polishModelValue = ref('gemini-2.5-flash')
+const polishModelCustom = ref(false)
+const isPolishing = ref(false)
+const polishedPrompt = ref('')
+const showPolishResult = ref(false)
+
+// 加载提示词模板
+const loadPromptTemplates = async () => {
+  try {
+    const res = await promptTemplateApi.getEnabled()
+    promptTemplates.value = res.data.data
+  } catch (e) {
+    console.error('加载提示词模板失败', e)
+  }
+}
+
+// 加载润色模型列表
+const loadPolishModels = async () => {
+  try {
+    const res = await modelCatalogApi.getByPlatform('promptPolish')
+    polishModels.value = res.data.data
+  } catch (e) {
+    console.error('加载润色模型失败', e)
+  }
+}
+
+// 选择模板
+const selectTemplate = (template: PromptTemplateItem) => {
+  imageForm.value.prompt = template.content
+  selectedTemplate.value = template._id
+  showTemplateDropdown.value = false
+}
+
+// 润色提示词
+const polishPrompt = async () => {
+  if (!imageForm.value.prompt.trim()) {
+    alert('请先输入提示词')
+    return
+  }
+  isPolishing.value = true
+  polishedPrompt.value = ''
+  showPolishResult.value = true
+  
+  try {
+    // 使用 fetch 进行 SSE 流式请求
+    const token = localStorage.getItem('auth_token')
+    const response = await fetch('/v1/prompt-polish/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        prompt: imageForm.value.prompt,
+        model: polishModelValue.value,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('润色请求失败')
+    }
+
+    const reader = response.body?.getReader()
+    const decoder = new TextDecoder()
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6).trim()
+            if (jsonStr) {
+              try {
+                const data = JSON.parse(jsonStr)
+                if (data.text) {
+                  polishedPrompt.value += data.text
+                } else if (data.error) {
+                  polishedPrompt.value = `错误: ${data.error}`
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    polishedPrompt.value = `润色失败: ${e.message}`
+  } finally {
+    isPolishing.value = false
+  }
+}
+
+// 使用润色后的提示词
+const usePolishedPrompt = () => {
+  imageForm.value.prompt = polishedPrompt.value
+  showPolishResult.value = false
+  polishedPrompt.value = ''
+}
 
 // 判断当前模型是否为 Grok/GPT 图片模型
 const isGrokModel = computed(() => {
@@ -64,12 +177,13 @@ const maxReferenceImages = computed(() => {
 
 // API 快捷配置
 const apiConfigVisible = ref(false)
-const apiConfigSaving = ref<Record<string, boolean>>({ geminiImage: false, grokImage: false })
-const apiConfigMsg = ref<Record<string, string>>({ geminiImage: '', grokImage: '' })
+const apiConfigSaving = ref<Record<string, boolean>>({ geminiImage: false, grokImage: false, promptPolish: false })
+const apiConfigMsg = ref<Record<string, string>>({ geminiImage: '', grokImage: '', promptPolish: '' })
 const hasTrailingSlash = (url: string) => !!url && url.endsWith('/')
 const apiConfig = ref<Record<string, { server: string; key: string }>>({
   geminiImage: { server: '', key: '' },
   grokImage: { server: '', key: '' },
+  promptPolish: { server: '', key: '' },
 })
 
 const loadApiConfig = async () => {
@@ -82,12 +196,15 @@ const loadApiConfig = async () => {
     if (data.grokImage) {
       apiConfig.value.grokImage = { server: data.grokImage.server || '', key: data.grokImage.key || '' }
     }
+    if (data.promptPolish) {
+      apiConfig.value.promptPolish = { server: data.promptPolish.server || '', key: data.promptPolish.key || '' }
+    }
   } catch (e) {
     console.error('加载 API 配置失败', e)
   }
 }
 
-const saveApiConfig = async (svc: 'geminiImage' | 'grokImage') => {
+const saveApiConfig = async (svc: 'geminiImage' | 'grokImage' | 'promptPolish') => {
   apiConfigSaving.value[svc] = true
   try {
     await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
@@ -103,6 +220,8 @@ const saveApiConfig = async (svc: 'geminiImage' | 'grokImage') => {
 
 onMounted(async () => {
   await loadApiConfig()
+  await loadPromptTemplates()
+  await loadPolishModels()
 })
 
 // 检查当前模型对应的 API 是否已配置
@@ -566,6 +685,42 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                 <span v-if="apiConfigMsg.grokImage" class="api-config-msg">{{ apiConfigMsg.grokImage }}</span>
               </div>
             </div>
+
+            <!-- 提示词润色配置 -->
+            <div class="api-config-slot">
+              <div class="api-config-slot-title">✨ 提示词润色</div>
+              <div class="api-config-hint">兼容 Gemini 原生格式 API（如 /v1beta/models/{model}:streamGenerateContent）</div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 地址</label>
+                <input
+                  v-model="apiConfig.promptPolish.server"
+                  type="text"
+                  class="api-config-input"
+                  placeholder="https://generativelanguage.googleapis.com"
+                >
+                <span v-if="hasTrailingSlash(apiConfig.promptPolish.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
+              </div>
+              <div class="api-config-row">
+                <label class="api-config-label">API 密钥</label>
+                <input
+                  v-model="apiConfig.promptPolish.key"
+                  type="password"
+                  class="api-config-input"
+                  placeholder="AIza..."
+                >
+              </div>
+              <div class="api-config-actions">
+                <button
+                  type="button"
+                  class="api-config-save-btn"
+                  :disabled="apiConfigSaving.promptPolish"
+                  @click="saveApiConfig('promptPolish')"
+                >
+                  {{ apiConfigSaving.promptPolish ? '保存中...' : '💾 保存' }}
+                </button>
+                <span v-if="apiConfigMsg.promptPolish" class="api-config-msg">{{ apiConfigMsg.promptPolish }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -600,11 +755,71 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 
         <div class="form-group">
           <label>提示词</label>
+          <!-- 提示词模板选择 -->
+          <div class="prompt-tools">
+            <div class="template-selector">
+              <button class="template-btn" @click="showTemplateDropdown = !showTemplateDropdown" type="button">
+                📋 选择模板
+              </button>
+              <div v-if="showTemplateDropdown" class="template-dropdown">
+                <div v-if="promptTemplates.length === 0" class="template-empty">暂无模板</div>
+                <div v-else>
+                  <div
+                    v-for="template in promptTemplates"
+                    :key="template._id"
+                    class="template-item"
+                    @click="selectTemplate(template)"
+                  >
+                    <span class="template-name">{{ template.name }}</span>
+                    <span class="template-category">{{ template.category }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="polish-section">
+              <div class="polish-model-select">
+                <select v-if="!polishModelCustom" v-model="polishModelValue" class="polish-model-dropdown">
+                  <template v-for="(models, category) in polishModels" :key="category">
+                    <optgroup :label="category">
+                      <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                    </optgroup>
+                  </template>
+                </select>
+                <input
+                  v-else
+                  v-model="polishModelValue"
+                  type="text"
+                  class="polish-model-input"
+                  placeholder="输入模型名称"
+                />
+                <button class="polish-model-toggle" @click="polishModelCustom = !polishModelCustom" type="button">
+                  {{ polishModelCustom ? '选择' : '自定义' }}
+                </button>
+              </div>
+              <button class="polish-btn" @click="polishPrompt" :disabled="isPolishing || !imageForm.prompt.trim()" type="button">
+                {{ isPolishing ? '润色中...' : '✨ 润色提示词' }}
+              </button>
+            </div>
+          </div>
           <textarea
             v-model="imageForm.prompt"
             rows="4"
             placeholder="描述你想要生成的图片内容..."
           ></textarea>
+          <!-- 润色结果展示 -->
+          <div v-if="showPolishResult" class="polish-result">
+            <div class="polish-result-header">
+              <span>✨ 润色结果</span>
+              <button class="polish-close-btn" @click="showPolishResult = false" type="button">×</button>
+            </div>
+            <div class="polish-result-content">
+              <pre>{{ polishedPrompt || '正在润色...' }}</pre>
+            </div>
+            <div class="polish-result-actions" v-if="polishedPrompt && !isPolishing">
+              <button class="use-polish-btn" @click="usePolishedPrompt" type="button">✓ 使用此提示词</button>
+              <button class="copy-polish-btn" @click="copyPrompt(polishedPrompt)" type="button">📋 复制</button>
+            </div>
+          </div>
         </div>
 
         <!-- Gemini 模型参数 -->
@@ -771,7 +986,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 
 .image-generator {
   padding: 20px;
-  max-width: 1400px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -792,7 +1007,7 @@ h1 {
   background: #fff;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
 .form-group {
@@ -826,7 +1041,12 @@ h1 {
 
 .form-group textarea {
   resize: vertical;
-  min-height: 100px;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .model-select {
@@ -970,7 +1190,9 @@ h1 {
   background: #fff;
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
 }
 
 .result-panel h2 {
@@ -980,7 +1202,7 @@ h1 {
 
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 20px;
 }
 
@@ -1308,6 +1530,16 @@ h1 {
   color: #555;
 }
 
+.api-config-hint {
+  font-size: 12px;
+  color: #888;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  background: #f5f7ff;
+  border-radius: 4px;
+  border-left: 3px solid #667eea;
+}
+
 .api-config-warning {
   padding: 10px 14px;
   margin-bottom: 12px;
@@ -1322,5 +1554,217 @@ h1 {
 
 .api-config-warning:hover {
   background: rgba(234, 179, 8, 0.18);
+}
+
+/* 提示词工具栏 */
+.prompt-tools {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.template-selector {
+  position: relative;
+}
+
+.template-btn {
+  padding: 8px 14px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.template-btn:hover {
+  background: #e8e8e8;
+}
+
+.template-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 240px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  margin-top: 4px;
+}
+
+.template-empty {
+  padding: 16px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+}
+
+.template-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.2s;
+}
+
+.template-item:last-child {
+  border-bottom: none;
+}
+
+.template-item:hover {
+  background: #f8f9fa;
+}
+
+.template-name {
+  display: block;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.template-category {
+  display: block;
+  font-size: 12px;
+  color: #888;
+}
+
+/* 润色功能 */
+.polish-section {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.polish-model-select {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.polish-model-dropdown,
+.polish-model-input {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.polish-model-toggle {
+  padding: 6px 10px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.polish-btn {
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.polish-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.polish-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 润色结果 */
+.polish-result {
+  margin-top: 12px;
+  border: 1px solid #667eea;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fafbff;
+}
+
+.polish-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.polish-close-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.polish-result-content {
+  padding: 14px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.polish-result-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.polish-result-actions {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid #e8e8ff;
+}
+
+.use-polish-btn {
+  padding: 8px 16px;
+  background: #22c55e;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.use-polish-btn:hover {
+  background: #16a34a;
+}
+
+.copy-polish-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.copy-polish-btn:hover {
+  background: #e8e8e8;
 }
 </style>

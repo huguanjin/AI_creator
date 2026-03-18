@@ -47,6 +47,7 @@ const platformOptions = [
   { label: '豆包 (Doubao)', value: 'doubao' },
   { label: '可灵 (Kling)', value: 'kling' },
   { label: 'Vidu', value: 'vidu' },
+  { label: '提示词润色', value: 'promptPolish' },
 ]
 
 const platformLabel: Record<string, string> = {
@@ -56,6 +57,7 @@ const platformLabel: Record<string, string> = {
   doubao: '豆包',
   kling: '可灵',
   vidu: 'Vidu',
+  promptPolish: '提示词润色',
 }
 
 const filteredModels = computed(() => {
@@ -348,6 +350,7 @@ onMounted(() => {
               <option value="doubao">豆包 (Doubao)</option>
               <option value="kling">可灵 (Kling)</option>
               <option value="vidu">Vidu</option>
+              <option value="promptPolish">提示词润色</option>
             </select>
           </div>
 

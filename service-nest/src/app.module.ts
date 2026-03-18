@@ -18,6 +18,8 @@ import { FeedbackModule } from './feedback/feedback.module'
 import { EmailModule } from './email/email.module'
 import { AnnouncementModule } from './announcement/announcement.module'
 import { ModelCatalogModule } from './model-catalog/model-catalog.module'
+import { PromptTemplateModule } from './prompt-template/prompt-template.module'
+import { PromptPolishModule } from './prompt-polish/prompt-polish.module'
 
 @Module({
   imports: [
@@ -62,6 +64,10 @@ import { ModelCatalogModule } from './model-catalog/model-catalog.module'
     AnnouncementModule,
     // 模型目录管理模块
     ModelCatalogModule,
+    // 提示词模板模块
+    PromptTemplateModule,
+    // 提示词润色模块
+    PromptPolishModule,
   ],
 })
 export class AppModule {}

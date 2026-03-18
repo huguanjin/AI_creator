@@ -46,6 +46,10 @@ export interface UserApiConfig {
     key: string
     channel: string
   }
+  promptPolish: {
+    server: string
+    key: string
+  }
 }
 
 export interface UserConfigDocument {
@@ -133,6 +137,10 @@ export class UserConfigService implements OnApplicationBootstrap {
             key: config.vidu?.key || '',
             channel: config.vidu?.channel || 'aifast',
           },
+          promptPolish: {
+            server: config.promptPolish?.server || '',
+            key: config.promptPolish?.key || '',
+          },
         }
       }
     } catch (error) {
@@ -149,6 +157,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       kling: { server: '', key: '' },
       doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
       vidu: { server: '', key: '', channel: 'aifast' },
+      promptPolish: { server: '', key: '' },
     }
   }
 
@@ -211,6 +220,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       kling: { ...defaults.kling, ...stored.kling },
       doubao: { ...defaults.doubao, ...stored.doubao },
       vidu: { ...defaults.vidu, ...stored.vidu },
+      promptPolish: { ...defaults.promptPolish, ...stored.promptPolish },
     }
   }
 

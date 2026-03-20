@@ -1273,7 +1273,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 }
 
 .btn-xs.primary:hover {
-  background: var(--primary-dark);
+  background: var(--primary-hover);
   transform: translateY(-1px);
 }
 

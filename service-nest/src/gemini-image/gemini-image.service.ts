@@ -8,7 +8,7 @@ import { FileStorageService } from '../file-storage/file-storage.service'
 import { UserConfigService } from '../user-config/user-config.service'
 
 // 图片任务接口
-interface ImageTask {
+export interface ImageTask {
   taskId: string
   userId: string
   status: 'processing' | 'completed' | 'failed'
@@ -527,6 +527,54 @@ export class GeminiImageService {
       createdAt: doc.createdAt,
       apiServer: doc.apiServer,
       apiKeyMasked: doc.apiKeyMasked,
+    }
+  }
+
+  /**
+   * 获取用户的图片任务列表
+   */
+  async getUserTasks(userId: string, options?: { page?: number; limit?: number; status?: string }): Promise<{
+    tasks: ImageTask[]
+    total: number
+    page: number
+    limit: number
+  }> {
+    const collection = this.databaseService.getDb().collection('image_tasks')
+    const page = options?.page || 1
+    const limit = options?.limit || 20
+    const skip = (page - 1) * limit
+
+    const query: any = { userId }
+    if (options?.status) {
+      query.status = options.status
+    }
+
+    const [tasks, total] = await Promise.all([
+      collection
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray(),
+      collection.countDocuments(query),
+    ])
+
+    return {
+      tasks: tasks.map((doc: any) => ({
+        taskId: doc.taskId,
+        userId: doc.userId,
+        status: doc.status,
+        prompt: doc.prompt,
+        model: doc.model,
+        aspectRatio: doc.aspectRatio,
+        imageSize: doc.imageSize,
+        images: doc.images,
+        error: doc.error,
+        createdAt: doc.createdAt,
+      })),
+      total,
+      page,
+      limit,
     }
   }
 }

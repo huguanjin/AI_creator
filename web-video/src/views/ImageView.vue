@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { geminiImageApi, userConfigApi, promptTemplateApi, modelCatalogApi, type GeminiImageResult, type PromptTemplateItem, type ModelCatalogGrouped } from '@/api'
+import axios from 'axios'
 
 const isLoading = ref(false)
 const imageForm = ref({
@@ -25,6 +26,44 @@ const polishModelCustom = ref(false)
 const isPolishing = ref(false)
 const polishedPrompt = ref('')
 const showPolishResult = ref(false)
+const polishSystemPrompt = ref('')  // 用户自定义/选择的系统提示词
+const defaultSystemPrompt = ref('') // 管理员配置的默认系统提示词
+const showSystemPromptInput = ref(false) // 是否显示系统提示词输入框
+
+// 状态和错误信息
+const taskStatus = ref('')
+const errorMessage = ref('')
+
+// API 配置
+const apiConfig = ref({
+  geminiImage: { server: '', key: '' },
+  grokImage: { server: '', key: '' },
+  promptPolish: { server: '', key: '' },
+})
+const apiConfigSaving = ref({
+  geminiImage: false,
+  grokImage: false,
+  promptPolish: false,
+})
+const apiConfigMsg = ref({
+  geminiImage: '',
+  grokImage: '',
+  promptPolish: '',
+})
+
+// 生成结果
+const generatedImages = ref<any[]>([])
+const imageHistory = ref<any[]>([])
+
+// 文件上传
+const fileInput = ref<HTMLInputElement | null>(null)
+const referenceFiles = ref<File[]>([])
+
+// 下载菜单
+const showDownloadMenu = ref<number | null>(null)
+
+// 模型自定义切换
+const modelCustom = ref(false)
 
 // 加载提示词模板
 const loadPromptTemplates = async () => {
@@ -46,11 +85,28 @@ const loadPolishModels = async () => {
   }
 }
 
-// 选择模板
+// 加载默认系统提示词
+const loadDefaultSystemPrompt = async () => {
+  try {
+    const token = localStorage.getItem('auth_token')
+    const res = await axios.get('/v1/prompt-polish/system-prompt', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (res.data.status === 'success') {
+      defaultSystemPrompt.value = res.data.data.systemPrompt
+      polishSystemPrompt.value = res.data.data.systemPrompt
+    }
+  } catch (e) {
+    console.error('加载默认系统提示词失败', e)
+  }
+}
+
+// 选择角色设定模板（用于润色功能的系统提示词）
 const selectTemplate = (template: PromptTemplateItem) => {
-  imageForm.value.prompt = template.content
+  polishSystemPrompt.value = template.content
   selectedTemplate.value = template._id
   showTemplateDropdown.value = false
+  showSystemPromptInput.value = true // 自动展开角色设定区域
 }
 
 // 润色提示词
@@ -64,9 +120,9 @@ const polishPrompt = async () => {
   showPolishResult.value = true
   
   try {
-    // 使用 fetch 进行 SSE 流式请求
     const token = localStorage.getItem('auth_token')
-    const response = await fetch('/v1/prompt-polish/stream', {
+    const apiBase = import.meta.env.VITE_API_BASE || ''
+    const response = await fetch(`${apiBase}/v1/prompt-polish/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -75,6 +131,7 @@ const polishPrompt = async () => {
       body: JSON.stringify({
         prompt: imageForm.value.prompt,
         model: polishModelValue.value,
+        systemPrompt: polishSystemPrompt.value || undefined,
       }),
     })
 
@@ -177,401 +234,175 @@ const maxReferenceImages = computed(() => {
 
 // API 快捷配置
 const apiConfigVisible = ref(false)
-const apiConfigSaving = ref<Record<string, boolean>>({ geminiImage: false, grokImage: false, promptPolish: false })
-const apiConfigMsg = ref<Record<string, string>>({ geminiImage: '', grokImage: '', promptPolish: '' })
-const hasTrailingSlash = (url: string) => !!url && url.endsWith('/')
-const apiConfig = ref<Record<string, { server: string; key: string }>>({
-  geminiImage: { server: '', key: '' },
-  grokImage: { server: '', key: '' },
-  promptPolish: { server: '', key: '' },
+
+// 检查是否已配置当前模型所需的 API
+const isApiConfigMissing = computed(() => {
+  if (isGrokModel.value) {
+    return !apiConfig.value.grokImage.server || !apiConfig.value.grokImage.key
+  }
+  return !apiConfig.value.geminiImage.server || !apiConfig.value.geminiImage.key
 })
 
+// 检查 API 地址是否以 / 结尾
+const hasTrailingSlash = (url: string) => {
+  return url && url.endsWith('/')
+}
+
+const hasApiServerTrailingSlash = computed(() => {
+  return hasTrailingSlash(apiConfig.value.geminiImage.server) || 
+         hasTrailingSlash(apiConfig.value.grokImage.server) ||
+         hasTrailingSlash(apiConfig.value.promptPolish.server)
+})
+
+// 加载 API 配置
 const loadApiConfig = async () => {
   try {
-    const response = await userConfigApi.getFullConfig()
-    const data = response.data.data
-    if (data.geminiImage) {
-      apiConfig.value.geminiImage = { server: data.geminiImage.server || '', key: data.geminiImage.key || '' }
-    }
-    if (data.grokImage) {
-      apiConfig.value.grokImage = { server: data.grokImage.server || '', key: data.grokImage.key || '' }
-    }
-    if (data.promptPolish) {
-      apiConfig.value.promptPolish = { server: data.promptPolish.server || '', key: data.promptPolish.key || '' }
+    const res = await userConfigApi.getFullConfig()
+    if (res.data.data) {
+      const config = res.data.data
+      if (config.geminiImage) apiConfig.value.geminiImage = { ...config.geminiImage }
+      if (config.grokImage) apiConfig.value.grokImage = { ...config.grokImage }
+      if (config.promptPolish) apiConfig.value.promptPolish = { ...config.promptPolish }
     }
   } catch (e) {
     console.error('加载 API 配置失败', e)
   }
 }
 
-const saveApiConfig = async (svc: 'geminiImage' | 'grokImage' | 'promptPolish') => {
-  apiConfigSaving.value[svc] = true
+// 保存 API 配置
+const saveApiConfig = async (type: 'geminiImage' | 'grokImage' | 'promptPolish') => {
+  apiConfigSaving.value[type] = true
+  apiConfigMsg.value[type] = ''
   try {
-    await userConfigApi.updateServiceConfig(svc, apiConfig.value[svc])
-    apiConfigMsg.value[svc] = '✅ 保存成功'
-    setTimeout(() => { apiConfigMsg.value[svc] = '' }, 2000)
-  } catch (e: any) {
-    apiConfigMsg.value[svc] = '❌ 保存失败'
-    setTimeout(() => { apiConfigMsg.value[svc] = '' }, 3000)
+    await userConfigApi.updateServiceConfig(type, apiConfig.value[type])
+    apiConfigMsg.value[type] = '✅ 保存成功'
+    setTimeout(() => {
+      apiConfigMsg.value[type] = ''
+    }, 2000)
+  } catch (e) {
+    console.error('保存配置失败', e)
+    apiConfigMsg.value[type] = '❌ 保存失败'
   } finally {
-    apiConfigSaving.value[svc] = false
+    apiConfigSaving.value[type] = false
   }
 }
 
-onMounted(async () => {
-  await loadApiConfig()
-  await loadPromptTemplates()
-  await loadPolishModels()
-})
-
-// 检查当前模型对应的 API 是否已配置
-const isApiConfigMissing = computed(() => {
-  if (isGrokModel.value) {
-    const cfg = apiConfig.value.grokImage
-    return !cfg || !cfg.server || !cfg.key
-  }
-  const cfg = apiConfig.value.geminiImage
-  return !cfg || !cfg.server || !cfg.key
-})
-
-// 检查图片 API 地址是否末尾有 /
-const hasApiServerTrailingSlash = computed(() => {
-  return hasTrailingSlash(apiConfig.value.geminiImage?.server || '')
-    || hasTrailingSlash(apiConfig.value.grokImage?.server || '')
-})
-
-// 自定义模型输入
-const modelCustom = ref(false)
-
-// 参考图片
-const referenceFiles = ref<File[]>([])
-const fileInput = ref<HTMLInputElement | null>(null)
-
-// 生成的图片结果（url: 后端文件路径，data: 兼容旧格式 Base64）
-const generatedImages = ref<Array<{ mimeType: string; url?: string; data?: string }>>([])
-const currentTaskId = ref<string | null>(null)
-const taskStatus = ref<string>('')
-const errorMessage = ref<string>('')
-
-// 历史记录
-interface ImageHistory {
-  id: string
-  prompt: string
-  aspectRatio: string
-  imageSize: string
-  images: Array<{ mimeType: string; url?: string; data?: string }>
-  createdAt: number
-}
-const imageHistory = ref<ImageHistory[]>([])
-
-// 从 localStorage 加载历史
-const loadHistory = () => {
-  const saved = localStorage.getItem('gemini_image_history')
-  if (saved) {
-    try {
-      imageHistory.value = JSON.parse(saved)
-    } catch (e) {
-      imageHistory.value = []
-    }
-  }
-}
-
-// 保存历史到 localStorage
-const saveHistory = () => {
-  localStorage.setItem('gemini_image_history', JSON.stringify(imageHistory.value))
-}
-
-// 初始化加载历史
-loadHistory()
-
-// 处理参考图片选择
+// 处理文件选择
 const handleFileSelect = (event: Event) => {
   const input = event.target as HTMLInputElement
   if (input.files) {
-    const newFiles = Array.from(input.files)
-    const combined = [...referenceFiles.value, ...newFiles]
-    if (combined.length > maxReferenceImages.value) {
-      alert(`当前模型最多支持 ${maxReferenceImages.value} 张参考图片`)
-      referenceFiles.value = combined.slice(0, maxReferenceImages.value)
-    } else {
-      referenceFiles.value = combined
+    const files = Array.from(input.files)
+    if (referenceFiles.value.length + files.length > maxReferenceImages.value) {
+      alert(`最多只能上传 ${maxReferenceImages.value} 张参考图片`)
+      return
     }
+    referenceFiles.value.push(...files)
   }
-  input.value = ''
+  // 清空 input，允许重复选择同一文件
+  if (input) input.value = ''
 }
 
+// 移除文件
 const removeFile = (index: number) => {
   referenceFiles.value.splice(index, 1)
 }
 
+// 获取文件预览 URL
 const getFilePreviewUrl = (file: File) => {
   return URL.createObjectURL(file)
 }
 
-// 生成图片（同步方式）
+// 生成图片
 const generateImage = async () => {
-  if (!imageForm.value.prompt.trim()) {
-    alert('请输入提示词')
-    return
-  }
-
+  if (!imageForm.value.prompt.trim()) return
+  
   isLoading.value = true
-  generatedImages.value = []
+  taskStatus.value = '正在提交任务...'
   errorMessage.value = ''
-  taskStatus.value = '生成中...'
-
+  generatedImages.value = []
+  
   try {
-    const params: any = {
-      model: imageForm.value.model,
-      prompt: imageForm.value.prompt,
+    // 转换文件为 Base64
+    const referenceImages = []
+    for (const file of referenceFiles.value) {
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      // 去掉 data:image/xxx;base64, 前缀
+      referenceImages.push({
+        mimeType: file.type,
+        data: base64.split(',')[1]
+      })
     }
-    if (isGrokModel.value) {
-      params.size = imageForm.value.size
-      params.n = imageForm.value.n
-    } else {
-      params.aspectRatio = imageForm.value.aspectRatio
-      params.imageSize = imageForm.value.imageSize
+
+    const payload = {
+      ...imageForm.value,
+      referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+      referenceImage: referenceImages.length > 0 ? referenceImages[0] : undefined // 兼容旧 API
     }
-    const response = await geminiImageApi.generateImage(
-      params,
-      referenceFiles.value.length > 0 ? referenceFiles.value : undefined,
-    )
 
-    const data = response.data
-
-    if (data.status === 'completed' && data.images?.length > 0) {
-      generatedImages.value = data.images
-      taskStatus.value = '生成完成'
-
-      // 保存到历史
-      const historyItem: ImageHistory = {
+    const res = await geminiImageApi.generateImage(payload)
+    
+    if (res.data.status === 'success') {
+      taskStatus.value = '生成成功！'
+      generatedImages.value = res.data.data.images
+      
+      // 添加到历史记录
+      const newHistoryItem = {
         id: Date.now().toString(),
         prompt: imageForm.value.prompt,
+        model: imageForm.value.model,
         aspectRatio: imageForm.value.aspectRatio,
         imageSize: imageForm.value.imageSize,
-        images: data.images,
         createdAt: Date.now(),
+        images: res.data.data.images
       }
-      imageHistory.value.unshift(historyItem)
-      // 只保留最近 20 条
-      if (imageHistory.value.length > 20) {
-        imageHistory.value = imageHistory.value.slice(0, 20)
-      }
+      imageHistory.value.unshift(newHistoryItem)
       saveHistory()
-
-      // 清空表单
-      imageForm.value.prompt = ''
-      referenceFiles.value = []
     } else {
-      taskStatus.value = '生成失败'
-      errorMessage.value = '未能生成图片'
+      throw new Error(res.data.message || '生成失败')
     }
-  } catch (error: any) {
-    console.error('生成失败', error)
+  } catch (e: any) {
+    console.error('生成图片失败', e)
     taskStatus.value = '生成失败'
-    errorMessage.value = error.response?.data?.message || error.message
+    errorMessage.value = e.response?.data?.message || e.message || '未知错误'
   } finally {
     isLoading.value = false
   }
 }
 
-// 创建异步任务
-const createImageTask = async () => {
-  if (!imageForm.value.prompt.trim()) {
-    alert('请输入提示词')
-    return
-  }
-
-  isLoading.value = true
-  generatedImages.value = []
-  errorMessage.value = ''
-  taskStatus.value = '任务创建中...'
-
-  try {
-    const createParams: any = {
-      model: imageForm.value.model,
-      prompt: imageForm.value.prompt,
-    }
-    if (isGrokModel.value) {
-      createParams.size = imageForm.value.size
-      createParams.n = imageForm.value.n
-    } else {
-      createParams.aspectRatio = imageForm.value.aspectRatio
-      createParams.imageSize = imageForm.value.imageSize
-    }
-    const response = await geminiImageApi.createImage(
-      createParams,
-      referenceFiles.value.length > 0 ? referenceFiles.value : undefined,
-    )
-
-    currentTaskId.value = response.data.id
-    taskStatus.value = '处理中...'
-
-    // 开始轮询
-    pollTaskStatus(response.data.id)
-  } catch (error: any) {
-    console.error('创建任务失败', error)
-    taskStatus.value = '创建失败'
-    errorMessage.value = error.response?.data?.message || error.message
-    isLoading.value = false
-  }
-}
-
-// 轮询任务状态
-const pollTaskStatus = async (taskId: string) => {
-  const maxAttempts = 60
-  let attempts = 0
-
-  const poll = async () => {
-    if (attempts >= maxAttempts) {
-      taskStatus.value = '超时'
-      errorMessage.value = '任务处理超时'
-      isLoading.value = false
-      return
-    }
-    attempts++
-
-    try {
-      const response = await geminiImageApi.queryImage(taskId)
-      const data = response.data
-
-      if (data.status === 'completed') {
-        if (data.images && data.images.length > 0) {
-          generatedImages.value = data.images
-          taskStatus.value = '生成完成'
-
-          // 保存到历史
-          const historyItem: ImageHistory = {
-            id: taskId,
-            prompt: data.prompt || imageForm.value.prompt,
-            aspectRatio: data.aspectRatio || imageForm.value.aspectRatio,
-            imageSize: data.imageSize || imageForm.value.imageSize,
-            images: data.images,
-            createdAt: data.createdAt || Date.now(),
-          }
-          imageHistory.value.unshift(historyItem)
-          if (imageHistory.value.length > 20) {
-            imageHistory.value = imageHistory.value.slice(0, 20)
-          }
-          saveHistory()
-
-          // 清空表单
-          imageForm.value.prompt = ''
-          referenceFiles.value = []
-        } else {
-          taskStatus.value = '生成失败'
-          errorMessage.value = '未能生成图片'
-        }
-        isLoading.value = false
-        return
-      } else if (data.status === 'failed') {
-        taskStatus.value = '生成失败'
-        errorMessage.value = data.error || '未知错误'
-        isLoading.value = false
-        return
-      } else {
-        taskStatus.value = '处理中...'
-        setTimeout(poll, 2000)
-      }
-    } catch (error) {
-      console.error('查询失败', error)
-      setTimeout(poll, 3000)
-    }
-  }
-
-  poll()
-}
-
-// 下载图片 - 支持多种格式
-const downloadImage = (image: { mimeType: string; url?: string; data?: string }, index: number, format: 'original' | 'jpg' | 'png' = 'original') => {
-  if (format === 'original') {
-    // 原始格式直接下载
-    const link = document.createElement('a')
-    link.href = getImageSrc(image)
-    const ext = image.mimeType.split('/')[1] || 'png'
-    link.download = `gemini-image-${Date.now()}-${index}.${ext}`
-    link.click()
-  } else {
-    // 转换格式后下载
-    convertAndDownload(image, index, format)
-  }
-}
-
-// 转换图片格式并下载
-const convertAndDownload = (image: { mimeType: string; url?: string; data?: string }, index: number, format: 'jpg' | 'png') => {
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = img.width
-    canvas.height = img.height
-    const ctx = canvas.getContext('2d')!
-    
-    if (format === 'jpg') {
-      // JPG 不支持透明，填充白色背景
-      ctx.fillStyle = '#FFFFFF'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
-    }
-    
-    ctx.drawImage(img, 0, 0)
-    
-    const mimeType = format === 'png' ? 'image/png' : 'image/jpeg'
-    const quality = format === 'jpg' ? 0.95 : undefined
-    
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `gemini-image-${Date.now()}-${index}.${format}`
-        link.click()
-        URL.revokeObjectURL(url)
-      }
-    }, mimeType, quality)
-  }
-  img.src = getImageSrc(image)
-}
-
-// 下载格式选择状态
-const showDownloadMenu = ref<number | null>(null)
-
-const toggleDownloadMenu = (index: number) => {
-  showDownloadMenu.value = showDownloadMenu.value === index ? null : index
-}
-
-// 点击外部关闭菜单
-const closeDownloadMenu = () => {
-  showDownloadMenu.value = null
-}
-
-// 从历史加载
-const loadFromHistory = (item: ImageHistory) => {
-  generatedImages.value = item.images
-  taskStatus.value = '从历史加载'
-}
-
-// 删除历史记录
-const deleteHistory = (id: string) => {
-  imageHistory.value = imageHistory.value.filter(h => h.id !== id)
-  saveHistory()
-}
-
-const copyPrompt = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text)
-    alert('提示词已复制')
-  } catch {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
+// 复制提示词
+const copyPrompt = (text: string) => {
+  navigator.clipboard.writeText(text).then(() => {
+    alert('提示词已复制到剪贴板')
+  }).catch(() => {
+    // 降级方案
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
     document.execCommand('copy')
-    document.body.removeChild(ta)
-    alert('提示词已复制')
-  }
+    document.body.removeChild(textarea)
+    alert('提示词已复制到剪贴板')
+  })
 }
 
-// 清空所有历史
+// 从历史记录加载
+const loadFromHistory = (item: any) => {
+  imageForm.value.prompt = item.prompt
+  imageForm.value.model = item.model
+  imageForm.value.aspectRatio = item.aspectRatio || '1:1'
+  imageForm.value.imageSize = item.imageSize || '1K'
+  if (item.images && item.images.length > 0) {
+    generatedImages.value = item.images
+  }
+  // 滚动到顶部
+  // window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+// 清空历史记录
 const clearAllHistory = () => {
   if (confirm('确定要清空所有历史记录吗？')) {
     imageHistory.value = []
@@ -579,785 +410,1376 @@ const clearAllHistory = () => {
   }
 }
 
+// 删除单条历史记录
+const deleteHistory = (id: string) => {
+  imageHistory.value = imageHistory.value.filter(item => item.id !== id)
+  saveHistory()
+}
+
+// 下载历史记录中的图片
+const downloadHistoryImage = (item: any) => {
+  if (item.images && item.images.length > 0) {
+    item.images.forEach((image: any, index: number) => {
+      downloadImage(image, index, 'original')
+    })
+  }
+}
+
+// 保存历史记录到本地存储
+const saveHistory = () => {
+  localStorage.setItem('image_history', JSON.stringify(imageHistory.value))
+}
+
+// 加载历史记录（从后端）
+const loadHistory = async () => {
+  try {
+    const res = await geminiImageApi.getHistory({ limit: 50, status: 'completed' })
+    if (res.data.status === 'success') {
+      imageHistory.value = res.data.data.map(task => ({
+        id: task.taskId,
+        prompt: task.prompt,
+        model: task.model,
+        aspectRatio: task.aspectRatio,
+        imageSize: task.imageSize,
+        images: task.images || [],
+        createdAt: task.createdAt,
+      }))
+    }
+  } catch (e) {
+    console.error('加载历史记录失败', e)
+    // 回退到 localStorage
+    const history = localStorage.getItem('image_history')
+    if (history) {
+      try {
+        imageHistory.value = JSON.parse(history)
+      } catch (err) {
+        console.error('解析本地历史记录失败', err)
+      }
+    }
+  }
+}
+
+// 下载菜单控制
+const toggleDownloadMenu = (index: number) => {
+  if (showDownloadMenu.value === index) {
+    showDownloadMenu.value = null
+  } else {
+    showDownloadMenu.value = index
+  }
+}
+
+const closeDownloadMenu = () => {
+  showDownloadMenu.value = null
+}
+
+// 下载图片
+const downloadImage = async (image: any, index: number, format: 'original' | 'jpg' | 'png') => {
+  try {
+    const src = getImageSrc(image)
+    let blob: Blob
+    
+    if (src.startsWith('data:')) {
+      // Base64
+      const res = await fetch(src)
+      blob = await res.blob()
+    } else {
+      // URL
+      const res = await fetch(src)
+      blob = await res.blob()
+    }
+
+    // 如果需要转换格式
+    if (format !== 'original' && !image.mimeType.includes(format)) {
+      // 使用 Canvas 转换格式
+      const img = new Image()
+      img.src = URL.createObjectURL(blob)
+      await new Promise((resolve) => (img.onload = resolve))
+      
+      const canvas = document.createElement('canvas')
+      canvas.width = img.width
+      canvas.height = img.height
+      const ctx = canvas.getContext('2d')
+      ctx?.drawImage(img, 0, 0)
+      
+      const newMimeType = format === 'jpg' ? 'image/jpeg' : 'image/png'
+      const newDataUrl = canvas.toDataURL(newMimeType, 0.9)
+      const newRes = await fetch(newDataUrl)
+      blob = await newRes.blob()
+    }
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    // 生成文件名
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const ext = format === 'original' ? image.mimeType.split('/')[1] : format
+    a.download = `ai-image-${timestamp}-${index + 1}.${ext}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('下载图片失败', e)
+    alert('下载图片失败')
+  }
+}
+
+onMounted(async () => {
+  await loadHistory()
+  await loadApiConfig()
+  await loadPromptTemplates()
+  await loadPolishModels()
+  await loadDefaultSystemPrompt()
+})
+
 // 格式化时间
 const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleString()
 }
 
-// 获取图片 src - 支持 URL（文件存储）和 Base64（旧兼容）
+// 获取图片 src
 const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) => {
   if (image.url) {
-    // 文件存储模式：使用与 API 相同的 base URL（开发模式走代理，生产模式走 Nginx）
     const base = import.meta.env.VITE_API_BASE || ''
     return `${base}${image.url}`
   }
-  // 旧 Base64 模式兼容
   return `data:${image.mimeType};base64,${image.data}`
 }
 </script>
 
 <template>
   <div class="image-generator">
-    <h1>🎨 AI 图片创作</h1>
-
-    <div class="main-content">
-      <!-- 左侧：表单 -->
-      <div class="form-panel">
-        <!-- API 快捷配置 -->
-        <div v-if="isApiConfigMissing" class="api-config-warning" @click="apiConfigVisible = true">
-          ⚠️ 当前模型对应的 API 尚未配置，请先展开下方配置并填写 {{ isGrokModel ? 'Grok 图片' : 'Gemini 图片' }} 的 API 地址和密钥
-        </div>
-        <div v-if="!apiConfigVisible && hasApiServerTrailingSlash" class="api-config-warning" @click="apiConfigVisible = true">
-          ⚠️ API 地址末尾不需要 /，请展开配置并删除
-        </div>
-        <div class="api-config-section">
-          <button type="button" class="api-config-toggle" @click="apiConfigVisible = !apiConfigVisible">
-            ⚙️ API 配置
-            <span class="toggle-arrow">{{ apiConfigVisible ? '▲' : '▼' }}</span>
-          </button>
-          <div v-if="apiConfigVisible" class="api-config-form">
-            <!-- Gemini 图片配置 -->
-            <div class="api-config-slot">
-              <div class="api-config-slot-title">💎 Gemini 图片</div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 地址</label>
-                <input
-                  v-model="apiConfig.geminiImage.server"
-                  type="text"
-                  class="api-config-input"
-                  placeholder="https://api.example.com"
-                >
-                <span v-if="hasTrailingSlash(apiConfig.geminiImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
-              </div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 密钥</label>
-                <input
-                  v-model="apiConfig.geminiImage.key"
-                  type="password"
-                  class="api-config-input"
-                  placeholder="sk-..."
-                >
-              </div>
-              <div class="api-config-actions">
-                <button
-                  type="button"
-                  class="api-config-save-btn"
-                  :disabled="apiConfigSaving.geminiImage"
-                  @click="saveApiConfig('geminiImage')"
-                >
-                  {{ apiConfigSaving.geminiImage ? '保存中...' : '💾 保存' }}
-                </button>
-                <span v-if="apiConfigMsg.geminiImage" class="api-config-msg">{{ apiConfigMsg.geminiImage }}</span>
-              </div>
-            </div>
-
-            <!-- Grok 图片配置 -->
-            <div class="api-config-slot">
-              <div class="api-config-slot-title">⚡ Grok 图片</div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 地址</label>
-                <input
-                  v-model="apiConfig.grokImage.server"
-                  type="text"
-                  class="api-config-input"
-                  placeholder="https://api.example.com"
-                >
-                <span v-if="hasTrailingSlash(apiConfig.grokImage.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
-              </div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 密钥</label>
-                <input
-                  v-model="apiConfig.grokImage.key"
-                  type="password"
-                  class="api-config-input"
-                  placeholder="sk-..."
-                >
-              </div>
-              <div class="api-config-actions">
-                <button
-                  type="button"
-                  class="api-config-save-btn"
-                  :disabled="apiConfigSaving.grokImage"
-                  @click="saveApiConfig('grokImage')"
-                >
-                  {{ apiConfigSaving.grokImage ? '保存中...' : '💾 保存' }}
-                </button>
-                <span v-if="apiConfigMsg.grokImage" class="api-config-msg">{{ apiConfigMsg.grokImage }}</span>
-              </div>
-            </div>
-
-            <!-- 提示词润色配置 -->
-            <div class="api-config-slot">
-              <div class="api-config-slot-title">✨ 提示词润色</div>
-              <div class="api-config-hint">兼容 Gemini 原生格式 API（如 /v1beta/models/{model}:streamGenerateContent）</div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 地址</label>
-                <input
-                  v-model="apiConfig.promptPolish.server"
-                  type="text"
-                  class="api-config-input"
-                  placeholder="https://generativelanguage.googleapis.com"
-                >
-                <span v-if="hasTrailingSlash(apiConfig.promptPolish.server)" class="field-warning">⚠️ API 地址末尾不需要 /，请删除</span>
-              </div>
-              <div class="api-config-row">
-                <label class="api-config-label">API 密钥</label>
-                <input
-                  v-model="apiConfig.promptPolish.key"
-                  type="password"
-                  class="api-config-input"
-                  placeholder="AIza..."
-                >
-              </div>
-              <div class="api-config-actions">
-                <button
-                  type="button"
-                  class="api-config-save-btn"
-                  :disabled="apiConfigSaving.promptPolish"
-                  @click="saveApiConfig('promptPolish')"
-                >
-                  {{ apiConfigSaving.promptPolish ? '保存中...' : '💾 保存' }}
-                </button>
-                <span v-if="apiConfigMsg.promptPolish" class="api-config-msg">{{ apiConfigMsg.promptPolish }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>模型</label>
-          <div class="model-select">
-            <select v-if="!modelCustom" v-model="imageForm.model">
-              <optgroup label="Gemini">
-                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
-                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp</option>
-              </optgroup>
-              <optgroup label="Grok">
-                <option value="grok-4-1-image">grok-4-1-image</option>
-                <option value="grok-4-2-image">grok-4-2-image</option>
-              </optgroup>
-              <optgroup label="GPT">
-                <option value="gpt-image-1.5">gpt-image-1.5</option>
-              </optgroup>
-            </select>
-            <input
-              v-else
-              v-model="imageForm.model"
-              type="text"
-              placeholder="输入自定义模型名称"
-            />
-            <button class="toggle-btn" @click="modelCustom = !modelCustom">
-              {{ modelCustom ? '选择' : '自定义' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label>提示词</label>
-          <!-- 提示词模板选择 -->
-          <div class="prompt-tools">
-            <div class="template-selector">
-              <button class="template-btn" @click="showTemplateDropdown = !showTemplateDropdown" type="button">
-                📋 选择模板
-              </button>
-              <div v-if="showTemplateDropdown" class="template-dropdown">
-                <div v-if="promptTemplates.length === 0" class="template-empty">暂无模板</div>
-                <div v-else>
-                  <div
-                    v-for="template in promptTemplates"
-                    :key="template._id"
-                    class="template-item"
-                    @click="selectTemplate(template)"
-                  >
-                    <span class="template-name">{{ template.name }}</span>
-                    <span class="template-category">{{ template.category }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="polish-section">
-              <div class="polish-model-select">
-                <select v-if="!polishModelCustom" v-model="polishModelValue" class="polish-model-dropdown">
-                  <template v-for="(models, category) in polishModels" :key="category">
-                    <optgroup :label="category">
-                      <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
-                    </optgroup>
-                  </template>
-                </select>
-                <input
-                  v-else
-                  v-model="polishModelValue"
-                  type="text"
-                  class="polish-model-input"
-                  placeholder="输入模型名称"
-                />
-                <button class="polish-model-toggle" @click="polishModelCustom = !polishModelCustom" type="button">
-                  {{ polishModelCustom ? '选择' : '自定义' }}
-                </button>
-              </div>
-              <button class="polish-btn" @click="polishPrompt" :disabled="isPolishing || !imageForm.prompt.trim()" type="button">
-                {{ isPolishing ? '润色中...' : '✨ 润色提示词' }}
-              </button>
-            </div>
-          </div>
-          <textarea
-            v-model="imageForm.prompt"
-            rows="4"
-            placeholder="描述你想要生成的图片内容..."
-          ></textarea>
-          <!-- 润色结果展示 -->
-          <div v-if="showPolishResult" class="polish-result">
-            <div class="polish-result-header">
-              <span>✨ 润色结果</span>
-              <button class="polish-close-btn" @click="showPolishResult = false" type="button">×</button>
-            </div>
-            <div class="polish-result-content">
-              <pre>{{ polishedPrompt || '正在润色...' }}</pre>
-            </div>
-            <div class="polish-result-actions" v-if="polishedPrompt && !isPolishing">
-              <button class="use-polish-btn" @click="usePolishedPrompt" type="button">✓ 使用此提示词</button>
-              <button class="copy-polish-btn" @click="copyPrompt(polishedPrompt)" type="button">📋 复制</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Gemini 模型参数 -->
-        <div v-if="!isGrokModel" class="form-row">
-          <div class="form-group">
-            <label>宽高比</label>
-            <select v-model="imageForm.aspectRatio">
-              <option v-for="ar in availableAspectRatios" :key="ar.value" :value="ar.value">{{ ar.label }}</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>图片尺寸</label>
-            <select v-model="imageForm.imageSize">
-              <option v-for="sz in availableImageSizes" :key="sz.value" :value="sz.value">{{ sz.label }}</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Grok/GPT 模型参数 -->
-        <div v-else class="form-row">
-          <div class="form-group">
-            <label>图片尺寸</label>
-            <select v-model="imageForm.size">
-              <option value="1024x1024">1024×1024 (正方形)</option>
-              <option value="1536x1024">1536×1024 (横屏)</option>
-              <option value="1024x1536">1024×1536 (竖屏)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>生成数量</label>
-            <select v-model.number="imageForm.n">
-              <option :value="1">1 张</option>
-              <option :value="2">2 张</option>
-              <option :value="3">3 张</option>
-              <option :value="4">4 张</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- 参考图片上传 -->
-        <div class="form-group">
-          <label>参考图片 (可选，最多{{ maxReferenceImages }}张)</label>
-          <div class="file-upload">
-            <input
-              ref="fileInput"
-              type="file"
-              accept="image/*"
-              multiple
-              @change="handleFileSelect"
-              style="display: none"
-            />
-            <button class="upload-btn" @click="fileInput?.click()" :disabled="referenceFiles.length >= maxReferenceImages">
-              📎 添加参考图 ({{ referenceFiles.length }}/{{ maxReferenceImages }})
-            </button>
-            <span class="file-hint">支持 JPG、PNG 格式</span>
-          </div>
-          <div v-if="referenceFiles.length > 0" class="file-preview-list">
-            <div v-for="(file, index) in referenceFiles" :key="index" class="file-preview-item">
-              <img :src="getFilePreviewUrl(file)" :alt="file.name" />
-              <button class="remove-btn" @click="removeFile(index)">×</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="action-buttons">
-          <button
-            class="generate-btn"
-            :disabled="isLoading || !imageForm.prompt.trim() || isApiConfigMissing"
-            @click="generateImage"
-          >
-            {{ isLoading ? '生成中...' : '🚀 立即生成' }}
-          </button>
-        </div>
-
-        <div v-if="taskStatus" class="status-info">
-          <span class="status-text">状态: {{ taskStatus }}</span>
-          <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
-        </div>
-      </div>
-
-      <!-- 右侧：结果展示 -->
-      <div class="result-panel">
-        <h2>生成结果</h2>
-        
-        <div v-if="generatedImages.length > 0" class="image-grid">
-          <div v-for="(image, index) in generatedImages" :key="index" class="image-item">
-            <img :src="getImageSrc(image)" :alt="`生成图片 ${index + 1}`" />
-            <div class="image-actions">
-              <div class="download-dropdown">
-                <button @click="toggleDownloadMenu(index)">📥 下载 ▼</button>
-                <div v-if="showDownloadMenu === index" class="dropdown-menu" @mouseleave="closeDownloadMenu">
-                  <button @click="downloadImage(image, index, 'original'); closeDownloadMenu()">
-                    原始格式 ({{ image.mimeType.split('/')[1]?.toUpperCase() || 'IMG' }})
-                  </button>
-                  <button @click="downloadImage(image, index, 'jpg'); closeDownloadMenu()">
-                    JPG 格式
-                  </button>
-                  <button @click="downloadImage(image, index, 'png'); closeDownloadMenu()">
-                    PNG 格式
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="empty-result">
-          <p>暂无生成结果</p>
-          <p class="hint">输入提示词开始创作</p>
-        </div>
-      </div>
+    <div class="page-header">
+      <h1>🎨 AI 图片创作</h1>
+      <p class="subtitle">释放你的创意，一键生成精美图像</p>
     </div>
 
-    <!-- 历史记录 -->
-    <div class="history-section">
-      <div class="history-header">
-        <h2>📜 历史记录</h2>
-        <button v-if="imageHistory.length > 0" class="clear-btn" @click="clearAllHistory">
-          清空全部
-        </button>
-      </div>
+    <div class="main-content">
+      <!-- 左侧：表单配置区 -->
+      <div class="config-sidebar">
+        <!-- API 配置入口 -->
+        <div class="api-config-trigger">
+           <button class="config-toggle-btn" @click="apiConfigVisible = !apiConfigVisible" :class="{ 'is-active': apiConfigVisible }">
+             <span class="icon">⚙️</span> API 设置
+             <span v-if="isApiConfigMissing" class="status-dot warning"></span>
+           </button>
+           
+           <!-- API 配置面板 (浮层) -->
+           <div v-if="apiConfigVisible" class="api-config-dropdown">
+             <div class="config-header">
+               <h3>API 密钥配置</h3>
+               <button class="close-btn" @click="apiConfigVisible = false">×</button>
+             </div>
+             
+             <!-- Gemini 图片配置 -->
+             <div class="config-section">
+                <div class="section-title">💎 Gemini 图片</div>
+                <input v-model="apiConfig.geminiImage.server" type="text" placeholder="API 地址 (https://...)" class="input-sm">
+                <span v-if="hasTrailingSlash(apiConfig.geminiImage.server)" class="warning-text">末尾不需要 /</span>
+                <input v-model="apiConfig.geminiImage.key" type="password" placeholder="API Key" class="input-sm">
+                <button class="save-btn-sm" :disabled="apiConfigSaving.geminiImage" @click="saveApiConfig('geminiImage')">
+                  {{ apiConfigSaving.geminiImage ? '保存中...' : '保存' }}
+                </button>
+                <span class="msg-text">{{ apiConfigMsg.geminiImage }}</span>
+             </div>
 
-      <div v-if="imageHistory.length > 0" class="history-list">
-        <div v-for="item in imageHistory" :key="item.id" class="history-item">
-          <div class="history-preview">
-            <img
-              v-if="item.images[0]"
-              :src="getImageSrc(item.images[0])"
-              alt="历史图片"
-              @click="loadFromHistory(item)"
-            />
+             <!-- Grok 图片配置 -->
+             <div class="config-section">
+                <div class="section-title">⚡ Grok 图片</div>
+                <input v-model="apiConfig.grokImage.server" type="text" placeholder="API 地址" class="input-sm">
+                <span v-if="hasTrailingSlash(apiConfig.grokImage.server)" class="warning-text">末尾不需要 /</span>
+                <input v-model="apiConfig.grokImage.key" type="password" placeholder="API Key" class="input-sm">
+                <button class="save-btn-sm" :disabled="apiConfigSaving.grokImage" @click="saveApiConfig('grokImage')">
+                  {{ apiConfigSaving.grokImage ? '保存中...' : '保存' }}
+                </button>
+                <span class="msg-text">{{ apiConfigMsg.grokImage }}</span>
+             </div>
+
+             <!-- 润色服务配置 -->
+             <div class="config-section">
+                <div class="section-title">✨ 润色服务</div>
+                <input v-model="apiConfig.promptPolish.server" type="text" placeholder="API 地址" class="input-sm">
+                <span v-if="hasTrailingSlash(apiConfig.promptPolish.server)" class="warning-text">末尾不需要 /</span>
+                <input v-model="apiConfig.promptPolish.key" type="password" placeholder="API Key" class="input-sm">
+                <button class="save-btn-sm" :disabled="apiConfigSaving.promptPolish" @click="saveApiConfig('promptPolish')">
+                  {{ apiConfigSaving.promptPolish ? '保存中...' : '保存' }}
+                </button>
+                <span class="msg-text">{{ apiConfigMsg.promptPolish }}</span>
+             </div>
+           </div>
+        </div>
+
+        <div class="sidebar-scroll">
+          <!-- 图片生成模型选择 -->
+          <div class="control-group">
+            <label class="group-label">🖼️ 生图模型</label>
+            <div class="model-selector-wrapper">
+              <select v-if="!modelCustom" v-model="imageForm.model" class="modern-select">
+                <optgroup label="Gemini">
+                  <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                  <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
+                  <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp</option>
+                </optgroup>
+                <optgroup label="Grok">
+                  <option value="grok-4-1-image">grok-4-1-image</option>
+                  <option value="grok-4-2-image">grok-4-2-image</option>
+                </optgroup>
+                <optgroup label="GPT">
+                  <option value="gpt-image-1.5">gpt-image-1.5</option>
+                </optgroup>
+              </select>
+              <input v-else v-model="imageForm.model" type="text" class="modern-input" placeholder="输入自定义模型名称" />
+              <button class="toggle-btn" @click="modelCustom = !modelCustom">
+                {{ modelCustom ? '选择' : '自定义' }}
+              </button>
+            </div>
           </div>
-          <div class="history-info">
-            <p class="history-prompt">{{ item.prompt }}</p>
-            <p class="history-meta">
-              {{ item.aspectRatio }} | {{ item.imageSize }} | {{ formatTime(item.createdAt) }}
-            </p>
+
+          <!-- 提示词区域 -->
+          <div class="control-group prompt-group">
+            <div class="group-header">
+              <label class="group-label">生图提示词</label>
+            </div>
+            
+            <!-- 主输入框 -->
+            <textarea 
+              v-model="imageForm.prompt" 
+              class="modern-textarea main-prompt" 
+              placeholder="描述你想要生成的画面，例如：一只在雨中打伞的柴犬，赛博朋克风格..."
+            ></textarea>
+
+            <!-- 润色工具栏 -->
+            <div class="polish-toolbar">
+              <div class="polish-toolbar-header">
+                <span class="toolbar-label">✨ 提示词润色</span>
+                <button class="action-link" @click="showSystemPromptInput = !showSystemPromptInput">
+                  {{ showSystemPromptInput ? '收起设定 ▲' : '🎭 角色设定 ▼' }}
+                </button>
+              </div>
+              <div class="polish-controls">
+                <div class="polish-model-wrapper">
+                  <select v-if="!polishModelCustom" v-model="polishModelValue" class="polish-model-select">
+                    <template v-for="(models, category) in polishModels" :key="category">
+                      <optgroup :label="category">
+                        <option v-for="m in models" :key="m.value" :value="m.value">{{ m.name }}</option>
+                      </optgroup>
+                    </template>
+                  </select>
+                  <input v-else v-model="polishModelValue" type="text" class="polish-model-input" placeholder="输入润色模型名称" />
+                  <button class="toggle-custom-btn" @click="polishModelCustom = !polishModelCustom">
+                    {{ polishModelCustom ? '选择' : '自定义' }}
+                  </button>
+                </div>
+                <button class="polish-btn" @click="polishPrompt" :disabled="isPolishing || !imageForm.prompt.trim()">
+                  {{ isPolishing ? '润色中...' : '开始润色' }}
+                </button>
+              </div>
+            </div>
+            
+            <!-- 角色设定输入 -->
+            <div v-if="showSystemPromptInput" class="system-prompt-panel">
+               <div class="panel-header">
+                 <span>角色设定 (告诉AI如何优化提示词)</span>
+                 <div class="panel-actions">
+                   <button class="action-link" @click="showTemplateDropdown = !showTemplateDropdown">📚 模板</button>
+                   <button class="text-btn" @click="polishSystemPrompt = defaultSystemPrompt">重置</button>
+                 </div>
+               </div>
+               <!-- 角色设定模板下拉 -->
+               <div v-if="showTemplateDropdown" class="dropdown-panel">
+                 <div v-if="promptTemplates.length === 0" class="empty-state">暂无模板（管理员可在后台添加）</div>
+                 <div v-else class="template-list">
+                   <div v-for="template in promptTemplates" :key="template._id" class="template-item" @click="selectTemplate(template)">
+                     <span class="name">{{ template.name }}</span>
+                     <span class="category">{{ template.category }}</span>
+                   </div>
+                 </div>
+               </div>
+               <textarea v-model="polishSystemPrompt" class="modern-textarea sm" placeholder="例如：你是一个专业的摄影师，请帮我把描述转化为高质量的摄影提示词..."></textarea>
+            </div>
+
+            <!-- 润色结果 -->
+            <div v-if="showPolishResult" class="polish-result-panel">
+               <div class="panel-header polish-header">
+                 <span>✨ 润色结果</span>
+                 <button class="close-icon" @click="showPolishResult = false">×</button>
+               </div>
+               <div class="polish-content">{{ polishedPrompt || 'AI正在思考...' }}</div>
+               <div class="panel-footer" v-if="polishedPrompt && !isPolishing">
+                 <button class="btn-xs primary" @click="usePolishedPrompt">使用</button>
+                 <button class="btn-xs secondary" @click="copyPrompt(polishedPrompt)">复制</button>
+               </div>
+            </div>
           </div>
-          <div class="history-actions">
-            <button @click="copyPrompt(item.prompt)" title="复制提示词">📋 复制</button>
-            <button @click="loadFromHistory(item)">查看</button>
-            <button class="delete-btn" @click="deleteHistory(item.id)">删除</button>
+
+          <!-- 参数设置 -->
+          <div class="params-grid">
+            <div class="control-group" v-if="!isGrokModel">
+               <label class="group-label">宽高比</label>
+               <div class="radio-group-wrapper">
+                 <select v-model="imageForm.aspectRatio" class="modern-select">
+                    <option v-for="ar in availableAspectRatios" :key="ar.value" :value="ar.value">{{ ar.label }}</option>
+                 </select>
+               </div>
+            </div>
+            <div class="control-group">
+               <label class="group-label">尺寸/质量</label>
+               <select v-if="!isGrokModel" v-model="imageForm.imageSize" class="modern-select">
+                  <option v-for="sz in availableImageSizes" :key="sz.value" :value="sz.value">{{ sz.label }}</option>
+               </select>
+               <select v-else v-model="imageForm.size" class="modern-select">
+                  <option value="1024x1024">1024×1024</option>
+                  <option value="1536x1024">1536×1024</option>
+                  <option value="1024x1536">1024×1536</option>
+               </select>
+            </div>
+          </div>
+          
+          <div class="control-group" v-if="isGrokModel">
+             <label class="group-label">生成数量</label>
+             <div class="segmented-control">
+                <button v-for="n in 4" :key="n" :class="{ active: imageForm.n === n }" @click="imageForm.n = n">{{ n }}</button>
+             </div>
+          </div>
+
+          <!-- 参考图 -->
+          <div class="control-group">
+             <label class="group-label">参考图 <span class="sub-label">(可选)</span></label>
+             <div class="upload-area" @click="fileInput?.click()" :class="{ 'has-files': referenceFiles.length > 0 }">
+                <input ref="fileInput" type="file" accept="image/*" multiple @change="handleFileSelect" style="display: none" />
+                <div v-if="referenceFiles.length === 0" class="upload-placeholder">
+                   <span class="icon">📷</span>
+                   <span class="text">点击上传参考图</span>
+                </div>
+                <div v-else class="file-list">
+                   <div v-for="(file, index) in referenceFiles" :key="index" class="file-thumb">
+                      <img :src="getFilePreviewUrl(file)" />
+                      <button class="remove-btn" @click.stop="removeFile(index)">×</button>
+                   </div>
+                   <div class="add-more-btn" v-if="referenceFiles.length < maxReferenceImages">
+                      +
+                   </div>
+                </div>
+             </div>
+          </div>
+
+          <!-- 生成按钮 -->
+          <div class="submit-area">
+             <button class="generate-btn-lg" :disabled="isLoading || !imageForm.prompt.trim() || isApiConfigMissing" @click="generateImage">
+                <span v-if="isLoading" class="loader"></span>
+                <span v-else>🚀 立即生成</span>
+             </button>
+             <div v-if="taskStatus" class="status-message" :class="{ error: taskStatus.includes('失败') }">
+                {{ taskStatus }} {{ errorMessage ? `: ${errorMessage}` : '' }}
+             </div>
           </div>
         </div>
       </div>
 
-      <div v-else class="empty-history">
-        <p>暂无历史记录</p>
+      <!-- 右侧：展示区 -->
+      <div class="result-viewport">
+        <!-- 当前生成结果 -->
+        <div class="result-container" :class="{ 'has-result': generatedImages.length > 0 }">
+           <div v-if="generatedImages.length === 0" class="empty-state-lg">
+              <div class="illustration">🎨</div>
+              <h3>开始你的创作之旅</h3>
+              <p>在左侧输入提示词，让 AI 为你绘制心目中的画面</p>
+           </div>
+           
+           <div v-else class="image-showcase">
+              <div v-for="(image, index) in generatedImages" :key="index" class="showcase-item">
+                 <div class="image-wrapper">
+                    <img :src="getImageSrc(image)" :alt="`生成结果 ${index+1}`" />
+                    <div class="image-overlay">
+                       <div class="overlay-actions">
+                          <button class="action-btn" @click="downloadImage(image, index, 'original')">📥 下载原图</button>
+                          <button class="action-btn" @click="downloadImage(image, index, 'jpg')">📥 下载JPG</button>
+                       </div>
+                    </div>
+                 </div>
+                 <div class="showcase-actions">
+                    <button class="showcase-btn primary" @click="downloadImage(image, index, 'original')">
+                       📥 下载原图
+                    </button>
+                    <button class="showcase-btn secondary" @click="downloadImage(image, index, 'jpg')">
+                       📥 下载JPG
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        <!-- 历史记录区域（底部） -->
+        <div class="history-section" v-if="imageHistory.length > 0">
+           <div class="history-header">
+              <h3>📋 历史记录</h3>
+              <button class="clear-all-btn" @click="clearAllHistory">🗑️ 清空全部</button>
+           </div>
+           <div class="history-list">
+              <div v-for="item in imageHistory" :key="item.id" class="history-item">
+                 <div class="history-thumb" @click="loadFromHistory(item)">
+                    <img v-if="item.images && item.images[0]" :src="getImageSrc(item.images[0])" />
+                    <div v-else class="thumb-placeholder">🖼️</div>
+                 </div>
+                 <div class="history-info">
+                    <div class="history-prompt" :title="item.prompt">{{ item.prompt }}</div>
+                    <div class="history-meta">
+                       {{ item.aspectRatio || '1:1' }} | {{ item.imageSize || '1K' }} | {{ formatTime(item.createdAt) }}
+                    </div>
+                 </div>
+                 <div class="history-actions">
+                    <button class="history-btn copy" @click="copyPrompt(item.prompt)">📋 复制</button>
+                    <button class="history-btn view" @click="loadFromHistory(item)">👁️ 查看</button>
+                    <button class="history-btn delete" @click="deleteHistory(item.id)">🗑️ 删除</button>
+                 </div>
+              </div>
+           </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.field-warning {
-  display: block;
-  color: #e67e22;
-  font-size: 12px;
-  margin-top: 4px;
-  font-weight: 500;
-}
-
+/* 全局重置与变量 */
 .image-generator {
-  padding: 20px;
-  max-width: 1600px;
-  margin: 0 auto;
+  --primary-color: #6366f1;
+  --primary-hover: #4f46e5;
+  --bg-color: #f8fafc;
+  --card-bg: #ffffff;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --border-color: #e2e8f0;
+  --radius-lg: 16px;
+  --radius-md: 8px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  
+  max-width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  overflow: hidden;
 }
 
-h1 {
-  text-align: center;
-  margin-bottom: 30px;
-  color: #333;
+/* 顶部标题栏 */
+.page-header {
+  padding: 16px 24px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
+.page-header h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(to right, #6366f1, #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.page-header .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* 主布局 */
 .main-content {
-  display: grid;
-  grid-template-columns: 400px 1fr;
-  gap: 30px;
-  margin-bottom: 40px;
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
-.form-panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+/* 左侧边栏 */
+.config-sidebar {
+  width: 360px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
 }
 
-.form-group {
-  margin-bottom: 20px;
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-  color: #333;
+/* API 配置 */
+.api-config-trigger {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
 }
 
-.form-group input,
-.form-group select,
-.form-group textarea {
+.config-toggle-btn {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f1f5f9;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.config-toggle-btn:hover, .config-toggle-btn.is-active {
+  background: #e2e8f0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: auto;
+}
+
+.status-dot.warning {
+  background-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.api-config-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  right: 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 16px;
+  z-index: 100;
+  margin-top: 8px;
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.config-header h3 {
   font-size: 14px;
-  transition: border-color 0.2s;
+  margin: 0;
 }
 
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: #667eea;
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-secondary);
 }
 
-.form-group textarea {
-  resize: vertical;
-  min-height: 120px;
-  padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  line-height: 1.6;
+.config-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--border-color);
 }
 
-.model-select {
+.config-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.input-sm {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.save-btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.save-btn-sm:disabled {
+  opacity: 0.6;
+}
+
+.msg-text {
+  font-size: 11px;
+  margin-left: 8px;
+  color: #10b981;
+}
+
+.warning-text {
+  font-size: 11px;
+  color: #f59e0b;
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* 通用控件样式 */
+.control-group {
+  margin-bottom: 24px;
+}
+
+.group-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.sub-label {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.model-selector-wrapper {
   display: flex;
   gap: 8px;
 }
 
-.model-select select,
-.model-select input {
-  flex: 1;
-}
-
-.toggle-btn {
-  padding: 10px 16px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  cursor: pointer;
+.modern-select, .modern-input, .modern-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   font-size: 14px;
+  color: var(--text-primary);
   transition: all 0.2s;
 }
 
-.toggle-btn:hover {
-  background: #e0e0e0;
+.modern-select:focus, .modern-input:focus, .modern-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
 }
 
-.form-row {
+.icon-btn {
+  padding: 0 12px;
+  background: #f1f5f9;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.toggle-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+/* 提示词区域 */
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-link {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--primary-color);
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.action-link:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--primary-dark);
+}
+
+.text-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.text-btn:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+
+.magic-btn {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.modern-textarea.main-prompt {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.modern-textarea.sm {
+  min-height: 90px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 弹出面板 */
+.dropdown-panel, .system-prompt-panel, .polish-result-panel {
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-top: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.system-prompt-panel {
+  padding: 14px;
+}
+
+.template-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.template-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.template-item:hover {
+  background: #e2e8f0;
+}
+
+.template-item .name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.template-item .category {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.panel-header {
+  padding: 10px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.polish-header {
+  background: linear-gradient(to right, #6366f1, #8b5cf6);
+  color: white;
+  padding: 10px 14px;
+  margin: 0;
+}
+
+.polish-content {
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  color: var(--text-primary);
+  background: white;
+}
+
+.panel-footer {
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.btn-xs {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn-xs.primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.btn-xs.primary:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.btn-xs.secondary {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+
+.btn-xs.secondary:hover {
+  background: #cbd5e1;
+}
+
+.close-icon {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: opacity 0.2s;
+}
+
+.close-icon:hover {
+  opacity: 0.8;
+}
+
+/* 润色工具栏 */
+.polish-toolbar {
+  margin-top: 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f0f4ff 0%, #f8f5ff 100%);
+  border: 1px solid #e0e4ff;
+  border-radius: var(--radius-md);
+}
+
+.polish-toolbar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.toolbar-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-color);
+}
+
+.polish-controls {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.polish-model-wrapper {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.polish-model-select,
+.polish-model-input {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: white;
+  min-width: 0;
+}
+
+.toggle-custom-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  background: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.toggle-custom-btn:hover {
+  background: #f8fafc;
+  border-color: var(--primary-color);
+}
+
+.polish-btn {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.polish-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.polish-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 参数网格 */
+.params-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.file-upload {
+.segmented-control {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.segmented-control button {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.segmented-control button.active {
+  background: white;
+  color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* 上传区域 */
+.upload-area {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 80px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
 }
 
-.upload-btn {
-  padding: 10px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: transform 0.2s;
+.upload-area:hover {
+  border-color: var(--primary-color);
+  background: #f8fafc;
 }
 
-.upload-btn:hover {
-  transform: translateY(-1px);
+.upload-area.has-files {
+  padding: 12px;
+  border-style: solid;
 }
 
-.file-hint {
-  font-size: 12px;
-  color: #888;
-}
-
-.file-preview-list {
+.upload-placeholder {
   display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.upload-placeholder .icon {
+  font-size: 20px;
+}
+
+.file-list {
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
 }
 
-.file-preview-item {
+.file-thumb {
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
   position: relative;
-  width: 80px;
-  height: 80px;
+  border: 1px solid var(--border-color);
 }
 
-.file-preview-item img {
+.file-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
 }
 
-.file-preview-item .remove-btn {
+.remove-btn {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #ff4757;
+  top: 0;
+  right: 0;
+  background: rgba(0,0,0,0.5);
   color: white;
   border: none;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
   cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
 }
 
-.action-buttons {
-  margin-top: 24px;
+.add-more-btn {
+  width: 60px;
+  height: 60px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--text-secondary);
 }
 
-.generate-btn {
+/* 底部提交区 */
+.submit-area {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.generate-btn-lg {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.generate-btn:hover:not(:disabled) {
+.generate-btn-lg:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
 }
 
-.generate-btn:disabled {
+.generate-btn-lg:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.status-info {
-  margin-top: 16px;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
+.status-message {
+  text-align: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
-.status-text {
-  display: block;
-  color: #666;
+.status-message.error {
+  color: #ef4444;
 }
 
-.error-text {
-  display: block;
-  color: #ff4757;
-  margin-top: 8px;
-  font-size: 14px;
-}
-
-.result-panel {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+/* 右侧展示区 */
+.result-viewport {
+  flex: 1;
+  background: #f1f5f9;
   display: flex;
   flex-direction: column;
-}
-
-.result-panel h2 {
-  margin-bottom: 20px;
-  color: #333;
-}
-
-.image-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.image-item {
-  background: #f8f9fa;
-  border-radius: 12px;
+  position: relative;
   overflow: hidden;
 }
 
-.image-item img {
+/* 结果容器 */
+.result-container {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: auto;
+}
+
+.result-container.has-result {
+  align-items: flex-start;
+}
+
+.empty-state-lg {
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.empty-state-lg .illustration {
+  font-size: 64px;
+  margin-bottom: 24px;
+}
+
+.image-showcase {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.showcase-item {
+  background: white;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.image-wrapper {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.image-wrapper img {
   width: 100%;
   display: block;
 }
 
-.image-actions {
-  padding: 12px;
+.image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.2s;
   display: flex;
   justify-content: center;
+}
+
+.image-wrapper:hover .image-overlay {
+  opacity: 1;
+}
+
+.overlay-actions {
+  display: flex;
   gap: 12px;
 }
 
-.image-actions button {
+.action-btn {
   padding: 8px 16px;
-  background: #667eea;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.3);
   color: white;
-  border: none;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
   transition: background 0.2s;
 }
 
-.image-actions button:hover {
-  background: #5a6fd6;
+.action-btn:hover {
+  background: rgba(255,255,255,0.3);
 }
 
-/* 下载格式下拉菜单 */
-.download-dropdown {
-  position: relative;
-  display: inline-block;
+/* 图片下方的操作按钮 */
+.showcase-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.dropdown-menu {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  z-index: 100;
-  min-width: 160px;
-}
-
-.dropdown-menu button {
-  display: block;
-  width: 100%;
+.showcase-btn {
+  flex: 1;
   padding: 10px 16px;
-  background: white;
-  color: #333;
   border: none;
-  border-bottom: 1px solid #f0f0f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  font-size: 14px;
-  text-align: left;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-.dropdown-menu button:last-child {
-  border-bottom: none;
+.showcase-btn.primary {
+  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  color: white;
 }
 
-.dropdown-menu button:hover {
-  background: #f5f7ff;
-  color: #667eea;
+.showcase-btn.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
 }
 
-.empty-result {
-  text-align: center;
-  padding: 60px 20px;
-  color: #888;
+.showcase-btn.secondary {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
 }
 
-.empty-result .hint {
-  font-size: 14px;
-  margin-top: 8px;
+.showcase-btn.secondary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
+/* 历史记录区域 - 底部列表 */
 .history-section {
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border-color);
+  background: white;
+  flex-shrink: 0;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
 }
 
 .history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: #f8fafc;
 }
 
-.history-header h2 {
+.history-header h3 {
   margin: 0;
-  color: #333;
-}
-
-.clear-btn {
-  padding: 8px 16px;
-  background: #ff4757;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.clear-btn:hover {
-  background: #ff3344;
+.clear-all-btn {
+  background: #fee2e2;
+  color: #dc2626;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-all-btn:hover {
+  background: #fecaca;
 }
 
 .history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
 }
 
 .history-item {
   display: flex;
-  gap: 16px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 10px;
   align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all 0.2s;
+  border: 1px solid transparent;
 }
 
-.history-preview {
-  width: 80px;
-  height: 80px;
+.history-item:last-child {
+  margin-bottom: 0;
+}
+
+.history-item:hover {
+  background: #f1f5f9;
+  border-color: var(--primary-color);
+}
+
+.history-thumb {
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #e2e8f0;
 }
 
-.history-preview img {
+.history-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  cursor: pointer;
   transition: transform 0.2s;
 }
 
-.history-preview img:hover {
-  transform: scale(1.05);
+.history-thumb:hover img {
+  transform: scale(1.1);
+}
+
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #94a3b8;
 }
 
 .history-info {
@@ -1366,405 +1788,136 @@ h1 {
 }
 
 .history-prompt {
-  margin: 0 0 8px;
+  font-size: 13px;
   font-weight: 500;
-  color: #333;
-  white-space: nowrap;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 4px;
 }
 
 .history-meta {
-  margin: 0;
-  font-size: 12px;
-  color: #888;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .history-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
-.history-actions button {
-  padding: 6px 12px;
-  border: none;
+.history-btn {
+  padding: 6px 10px;
   border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
   cursor: pointer;
-  font-size: 13px;
-  background: #667eea;
-  color: white;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 
-.history-actions .delete-btn {
-  background: #ff4757;
+.history-btn.copy {
+  background: #fef3c7;
+  color: #d97706;
 }
 
-.empty-history {
-  text-align: center;
-  padding: 40px;
-  color: #888;
+.history-btn.copy:hover {
+  background: #fde68a;
 }
 
+.history-btn.view {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.history-btn.view:hover {
+  background: #bfdbfe;
+}
+
+.history-btn.delete {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.history-btn.delete:hover {
+  background: #fecaca;
+}
+
+/* 响应式调整 */
 @media (max-width: 900px) {
+  .image-generator {
+    height: auto;
+    overflow: visible;
+  }
+  
   .main-content {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    overflow: visible;
+  }
+  
+  .config-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .result-viewport {
+    min-height: 500px;
+  }
+  
+  .api-config-dropdown {
+    width: 95%;
+    left: 2.5%;
   }
 
-  .form-row {
-    grid-template-columns: 1fr;
+  /* 历史记录响应式 */
+  .history-section {
+    max-height: 350px;
+  }
+
+  .history-item {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .history-thumb {
+    width: 50px;
+    height: 50px;
+  }
+
+  .history-info {
+    flex: 1 1 100%;
+    order: 3;
+  }
+
+  .history-actions {
+    order: 2;
+  }
+
+  .history-btn {
+    font-size: 10px;
+    padding: 5px 8px;
   }
 }
 
-/* API 快捷配置 */
-.api-config-section {
-  margin-bottom: 16px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  overflow: hidden;
+/* Loading 动画 */
+.loader {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #ffffff;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: rotation 1s linear infinite;
 }
 
-.api-config-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 14px;
-  background: #f8f9fa;
-  border: none;
-  color: #666;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.api-config-toggle:hover {
-  background: #f0f0f0;
-  color: #333;
-}
-
-.toggle-arrow {
-  font-size: 10px;
-}
-
-.api-config-form {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-top: 1px solid #e0e0e0;
-}
-
-.api-config-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.api-config-label {
-  font-size: 13px;
-  color: #666;
-  white-space: nowrap;
-  min-width: 60px;
-}
-
-.api-config-input {
-  flex: 1;
-  padding: 6px 10px;
-  font-size: 13px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.api-config-input:focus {
-  border-color: #667eea;
-}
-
-.api-config-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.api-config-save-btn {
-  padding: 5px 14px;
-  font-size: 12px;
-  border: none;
-  border-radius: 6px;
-  background: #667eea;
-  color: white;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.api-config-save-btn:hover {
-  background: #5a6fd6;
-}
-
-.api-config-save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.api-config-msg {
-  font-size: 12px;
-  color: #888;
-}
-
-.api-config-slot {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 0;
-}
-
-.api-config-slot + .api-config-slot {
-  border-top: 1px dashed #e0e0e0;
-  margin-top: 2px;
-}
-
-.api-config-slot-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #555;
-}
-
-.api-config-hint {
-  font-size: 12px;
-  color: #888;
-  margin-bottom: 6px;
-  padding: 6px 10px;
-  background: #f5f7ff;
-  border-radius: 4px;
-  border-left: 3px solid #667eea;
-}
-
-.api-config-warning {
-  padding: 10px 14px;
-  margin-bottom: 12px;
-  background: rgba(234, 179, 8, 0.1);
-  border: 1px solid rgba(234, 179, 8, 0.3);
-  border-radius: 8px;
-  color: #b8860b;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.api-config-warning:hover {
-  background: rgba(234, 179, 8, 0.18);
-}
-
-/* 提示词工具栏 */
-.prompt-tools {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.template-selector {
-  position: relative;
-}
-
-.template-btn {
-  padding: 8px 14px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-}
-
-.template-btn:hover {
-  background: #e8e8e8;
-}
-
-.template-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 240px;
-  max-height: 300px;
-  overflow-y: auto;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 100;
-  margin-top: 4px;
-}
-
-.template-empty {
-  padding: 16px;
-  text-align: center;
-  color: #888;
-  font-size: 13px;
-}
-
-.template-item {
-  padding: 10px 14px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background 0.2s;
-}
-
-.template-item:last-child {
-  border-bottom: none;
-}
-
-.template-item:hover {
-  background: #f8f9fa;
-}
-
-.template-name {
-  display: block;
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 2px;
-}
-
-.template-category {
-  display: block;
-  font-size: 12px;
-  color: #888;
-}
-
-/* 润色功能 */
-.polish-section {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex: 1;
-  justify-content: flex-end;
-}
-
-.polish-model-select {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.polish-model-dropdown,
-.polish-model-input {
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 13px;
-  min-width: 180px;
-  max-width: 280px;
-}
-
-.polish-model-toggle {
-  padding: 6px 10px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.polish-btn {
-  padding: 8px 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: opacity 0.2s;
-  white-space: nowrap;
-}
-
-.polish-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.polish-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* 润色结果 */
-.polish-result {
-  margin-top: 12px;
-  border: 1px solid #667eea;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #fafbff;
-}
-
-.polish-result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.polish-close-btn {
-  background: transparent;
-  border: none;
-  color: white;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-.polish-result-content {
-  padding: 14px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.polish-result-content pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 13px;
-  color: #333;
-  line-height: 1.6;
-}
-
-.polish-result-actions {
-  display: flex;
-  gap: 10px;
-  padding: 10px 14px;
-  border-top: 1px solid #e8e8ff;
-}
-
-.use-polish-btn {
-  padding: 8px 16px;
-  background: #22c55e;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.use-polish-btn:hover {
-  background: #16a34a;
-}
-
-.copy-polish-btn {
-  padding: 8px 16px;
-  background: #f0f0f0;
-  color: #333;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.copy-polish-btn:hover {
-  background: #e8e8e8;
+@keyframes rotation {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>

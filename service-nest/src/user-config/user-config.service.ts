@@ -300,7 +300,7 @@ export class UserConfigService implements OnApplicationBootstrap {
    */
   async updateUserServiceConfig(
     userId: string,
-    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu',
+    service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'kling' | 'doubao' | 'vidu' | 'promptPolish',
     serviceConfig: { server?: string; key?: string; characterServer?: string; characterKey?: string; channel?: string; xiaohuminiServer?: string; xiaohuminiKey?: string },
   ): Promise<UserApiConfig> {
     const config = await this.getUserConfig(userId)
@@ -336,6 +336,9 @@ export class UserConfigService implements OnApplicationBootstrap {
       if (serviceConfig.server !== undefined) config.vidu.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.vidu.key = serviceConfig.key
       if (serviceConfig.channel !== undefined) config.vidu.channel = serviceConfig.channel
+    } else if (service === 'promptPolish') {
+      if (serviceConfig.server !== undefined) config.promptPolish.server = serviceConfig.server
+      if (serviceConfig.key !== undefined) config.promptPolish.key = serviceConfig.key
     }
 
     const collection = this.databaseService.getDb().collection('user_configs')

@@ -100,17 +100,17 @@ export class UserConfigController {
     const { userId } = req.user
     this.logger.log(`📝 Update user ${service} config: ${userId}`)
 
-    if (!['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling', 'vidu'].includes(service)) {
+    if (!['sora', 'veo', 'geminiImage', 'grok', 'grokImage', 'doubao', 'kling', 'vidu', 'promptPolish'].includes(service)) {
       return {
         status: 'error',
-        message: `Invalid service: ${service}. Valid: sora, veo, geminiImage, grok, grokImage, doubao, kling, vidu`,
+        message: `Invalid service: ${service}. Valid: sora, veo, geminiImage, grok, grokImage, doubao, kling, vidu, promptPolish`,
       }
     }
 
     try {
       await this.userConfigService.updateUserServiceConfig(
         userId,
-        service as 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu',
+        service as 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu' | 'promptPolish',
         dto,
       )
       const displayConfig = await this.userConfigService.getUserConfigForDisplay(userId)

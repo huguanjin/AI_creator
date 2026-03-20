@@ -7,4 +7,8 @@ export class PolishPromptDto {
   @IsString()
   @IsOptional()
   model?: string
+
+  @IsString()
+  @IsOptional()
+  systemPrompt?: string
 }

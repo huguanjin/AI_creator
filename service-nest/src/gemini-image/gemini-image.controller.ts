@@ -117,7 +117,10 @@ export class GeminiImageController {
     try {
       const result = await this.geminiImageService.generateImageSync(createImageDto, userId)
       this.logger.log(`✅ Image generated: ${result.images?.length || 0} image(s)`)
-      return result
+      return {
+        status: 'success',
+        data: result,
+      }
     }
     catch (error) {
       this.logger.error(`❌ Failed to generate image: ${error.message}`)
@@ -158,7 +161,10 @@ export class GeminiImageController {
 
       const result = await this.geminiImageService.generateImageSync(createImageDto, userId)
       this.logger.log(`✅ Image generated: ${result.images?.length || 0} image(s)`)
-      return result
+      return {
+        status: 'success',
+        data: result,
+      }
     }
     catch (error) {
       this.logger.error(`❌ Failed to generate image: ${error.message}`)
@@ -195,6 +201,46 @@ export class GeminiImageController {
           details: error.response?.data || null,
         },
         error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      )
+    }
+  }
+
+  /**
+   * 获取当前用户的图片任务历史
+   * GET /v1/image/history?page=1&limit=20&status=completed
+   */
+  @Get('history')
+  async getHistory(
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    const userId = (req as any).user?.userId || 'anonymous'
+    this.logger.log(`📜 Getting image history for user: ${userId}`)
+
+    try {
+      const result = await this.geminiImageService.getUserTasks(userId, {
+        page: page ? parseInt(page, 10) : 1,
+        limit: limit ? parseInt(limit, 10) : 20,
+        status: status || undefined,
+      })
+      return {
+        status: 'success',
+        data: result.tasks,
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+      }
+    }
+    catch (error) {
+      this.logger.error(`❌ Failed to get history: ${error.message}`)
+      throw new HttpException(
+        {
+          status: 'error',
+          message: error.message,
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
       )
     }
   }

@@ -32,9 +32,21 @@ export class PromptPolishService {
   }
 
   /**
-   * 获取润色系统提示词（从全局配置中获取）
+   * 获取润色系统提示词（从全局配置中获取，或使用默认值）
    */
-  private getSystemPrompt(): string {
+  private getSystemPrompt(customSystemPrompt?: string): string {
+    // 优先使用前端传入的自定义系统提示词
+    if (customSystemPrompt && customSystemPrompt.trim()) {
+      return customSystemPrompt
+    }
+    // 其次使用管理员配置的全局系统提示词
+    return this.getDefaultSystemPrompt()
+  }
+
+  /**
+   * 获取默认系统提示词（供外部调用）
+   */
+  getDefaultSystemPrompt(): string {
     const config = this.configService.getPromptPolishConfig()
     return config.systemPrompt || `你是一个专业的AI绘画提示词优化专家。用户会给你一个简单的图片描述，请你将其优化为更详细、更专业的AI绘画提示词。
 
@@ -55,6 +67,7 @@ export class PromptPolishService {
     prompt: string,
     model: string,
     userId: string,
+    customSystemPrompt?: string,
   ): AsyncGenerator<string, void, unknown> {
     const config = await this.getUserPromptPolishConfig(userId)
 
@@ -63,7 +76,7 @@ export class PromptPolishService {
       return
     }
 
-    const systemPrompt = this.getSystemPrompt()
+    const systemPrompt = this.getSystemPrompt(customSystemPrompt)
 
     const payload = {
       contents: [
@@ -138,14 +151,14 @@ export class PromptPolishService {
   /**
    * 润色提示词（非流式，返回完整结果）
    */
-  async polishPrompt(prompt: string, model: string, userId: string): Promise<string> {
+  async polishPrompt(prompt: string, model: string, userId: string, customSystemPrompt?: string): Promise<string> {
     const config = await this.getUserPromptPolishConfig(userId)
 
     if (!config.server || !config.key) {
       throw new Error('提示词润色服务未配置，请联系管理员')
     }
 
-    const systemPrompt = this.getSystemPrompt()
+    const systemPrompt = this.getSystemPrompt(customSystemPrompt)
 
     const payload = {
       contents: [

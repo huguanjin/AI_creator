@@ -527,6 +527,27 @@ export const geminiImageApi = {
   // 查询图片状态
   queryImage: (id: string) =>
     api.get<GeminiImageResult>(`/v1/image/query?id=${encodeURIComponent(id)}`),
+
+  // 获取用户图片历史记录
+  getHistory: (params?: { page?: number; limit?: number; status?: string }) =>
+    api.get<{
+      status: string
+      data: Array<{
+        taskId: string
+        userId: string
+        status: 'processing' | 'completed' | 'failed'
+        prompt: string
+        model: string
+        aspectRatio: string
+        imageSize: string
+        images?: Array<{ mimeType: string; url: string }>
+        error?: string
+        createdAt: number
+      }>
+      total: number
+      page: number
+      limit: number
+    }>('/v1/image/history', { params }),
 }
 
 // ============ Config API (全局配置，管理员用) ============
@@ -607,7 +628,7 @@ export const userConfigApi = {
     api.get<{ status: string; data: UserApiConfig }>('/v1/user-config/full'),
 
   // 更新用户单个服务配置
-  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu', config: Partial<ServiceConfig>) =>
+  updateServiceConfig: (service: 'sora' | 'veo' | 'geminiImage' | 'grok' | 'grokImage' | 'doubao' | 'kling' | 'vidu' | 'promptPolish', config: Partial<ServiceConfig>) =>
     api.put<{ status: string; message: string; data: UserApiConfig }>(`/v1/user-config/${service}`, config),
 
   // 同步默认配置到所有服务

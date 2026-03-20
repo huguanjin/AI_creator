@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   Req,
@@ -16,6 +17,16 @@ import { Response } from 'express'
 @Controller('v1/prompt-polish')
 export class PromptPolishController {
   constructor(private readonly promptPolishService: PromptPolishService) {}
+
+  /**
+   * 获取管理员配置的默认系统提示词
+   */
+  @Get('system-prompt')
+  @UseGuards(JwtAuthGuard)
+  async getSystemPrompt() {
+    const systemPrompt = this.promptPolishService.getDefaultSystemPrompt()
+    return { status: 'success', data: { systemPrompt } }
+  }
 
   /**
    * 润色提示词（SSE 流式响应）
@@ -41,6 +52,7 @@ export class PromptPolishController {
         dto.prompt,
         model,
         userId,
+        dto.systemPrompt,
       )) {
         res.write(`data: ${chunk}\n\n`)
       }
@@ -66,6 +78,7 @@ export class PromptPolishController {
         dto.prompt,
         model,
         userId,
+        dto.systemPrompt,
       )
       return { status: 'success', data: { polishedPrompt: result } }
     } catch (error: any) {

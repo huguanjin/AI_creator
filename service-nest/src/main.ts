@@ -1,6 +1,7 @@
 import 'reflect-metadata'
 import * as dotenv from 'dotenv'
 import * as path from 'path'
+import * as bodyParser from 'body-parser'
 import { NestFactory } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { NestExpressApplication } from '@nestjs/platform-express'
@@ -9,6 +10,10 @@ dotenv.config()
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
+
+  // 增加请求体大小限制（支持大图片上传）
+  app.use(bodyParser.json({ limit: '50mb' }))
+  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }))
 
   // 启用 CORS
   app.enableCors({

@@ -1845,10 +1845,10 @@ onMounted(async () => {
                 v-model.number="viduForm.duration"
                 type="number"
                 class="form-input"
-                min="1"
-                max="10"
+                min="0"
+                max="16"
                 step="1"
-                placeholder="1-10"
+                placeholder="0-16"
               >
             </div>
             <div class="form-group">

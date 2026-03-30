@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common'
 import axios from 'axios'
+import { execSync } from 'child_process'
 import { randomUUID } from 'crypto'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
 import { CreateImageDto } from './dto/create-image.dto'
 import { ConfigService } from '../config/config.service'
 import { DatabaseService } from '../database/database.service'
@@ -31,6 +35,8 @@ export interface ImageTask {
 @Injectable()
 export class GeminiImageService {
   private readonly logger = new Logger(GeminiImageService.name)
+  private readonly isWindows = process.platform === 'win32'
+  private readonly safeTmpDir: string
 
   constructor(
     private readonly configService: ConfigService,
@@ -38,6 +44,11 @@ export class GeminiImageService {
     private readonly fileStorageService: FileStorageService,
     private readonly userConfigService: UserConfigService,
   ) {
+    // 初始化安全临时目录（避免 os.tmpdir() 含中文路径在 curl shell 中编码异常）
+    this.safeTmpDir = path.join(process.cwd(), 'uploads', 'temp')
+    if (!fs.existsSync(this.safeTmpDir)) {
+      fs.mkdirSync(this.safeTmpDir, { recursive: true })
+    }
     const config = this.configService.getGeminiImageConfig()
     this.logger.log(`🔧 Gemini Image Server: ${config.server}`)
     this.logger.log(`🔑 Gemini Image Key: ${config.key ? `****${config.key.slice(-8)}` : 'NOT SET'}`)
@@ -67,7 +78,21 @@ export class GeminiImageService {
     } catch (e) {
       this.logger.warn(`⚠️ Failed to load user config for ${userId}, using global`)
     }
-    return this.configService.getGrokImageConfig()
+    const globalCfg = this.configService.getGrokImageConfig()
+    return { ...globalCfg, channel: 'aifast' }
+  }
+
+  /**
+   * 获取用户的 Grok Image 渠道（优先 DTO，其次用户配置，默认 aifast）
+   */
+  private async resolveGrokImageChannel(dto: CreateImageDto, userId: string): Promise<string> {
+    if (dto.channel) return dto.channel
+    try {
+      const userConfig = await this.userConfigService.getUserConfig(userId)
+      return userConfig.grokImage?.channel || 'aifast'
+    } catch {
+      return 'aifast'
+    }
   }
 
   /**
@@ -234,11 +259,24 @@ export class GeminiImageService {
   }
 
   /**
-   * 调用 Grok/OpenAI 兼容图片 API
-   * 请求格式: { model, size, n, prompt, image? }
-   * 响应格式: { data: [{ b64_json, url }] }
+   * 调用 Grok/OpenAI 兼容图片 API（根据渠道分发）
    */
   private async callGrokImageApi(dto: CreateImageDto, userId: string): Promise<Array<{ mimeType: string; data: string }>> {
+    const channel = await this.resolveGrokImageChannel(dto, userId)
+    this.logger.log(`🔀 Grok Image channel: ${channel}`)
+
+    if (channel === 'xiaohumini') {
+      return this.callGrokImageXiaohumini(dto, userId)
+    }
+    return this.callGrokImageAifast(dto, userId)
+  }
+
+  /**
+   * aifast 渠道：Grok/OpenAI 兼容图片 API
+   * 请求格式: { model, size, n, prompt, response_format: 'b64_json', image? }
+   * 响应格式: { data: [{ b64_json }] }
+   */
+  private async callGrokImageAifast(dto: CreateImageDto, userId: string): Promise<Array<{ mimeType: string; data: string }>> {
     const model = dto.model || 'grok-4-1-image'
     const size = dto.size || '1024x1024'
     const n = dto.n || 1
@@ -316,6 +354,207 @@ export class GeminiImageService {
     }
 
     return images
+  }
+
+  /**
+   * xiaohumini 渠道：Grok 图片生成
+   * POST {server}/v1/images/generations (JSON)
+   * 请求格式: { model, prompt, size }
+   * 响应格式: { data: [{ url }] }
+   */
+  private async callGrokImageXiaohumini(dto: CreateImageDto, userId: string): Promise<Array<{ mimeType: string; data: string }>> {
+    const model = dto.model || 'grok-3-image'
+    const size = dto.size || '960x960'
+
+    const grokConfig = await this.getUserGrokImageConfig(userId)
+    this.logger.log(`🔧 Grok Image Server [xiaohumini]: ${grokConfig.server}`)
+
+    // xiaohumini 有参考图时走编辑接口 /v1/images/edits
+    if (dto.referenceImages && dto.referenceImages.length > 0) {
+      return this.callGrokImageEditXiaohumini(dto, grokConfig)
+    }
+
+    const payload: any = {
+      model,
+      prompt: dto.prompt,
+      size,
+    }
+
+    this.logger.log(`📤 Sending request to xiaohumini Grok Image API, model: ${model}, size: ${size}`)
+
+    const responseData = await this.httpPost(
+      `${grokConfig.server}/v1/images/generations`,
+      payload,
+      grokConfig.key,
+    )
+    this.logger.log(`✅ xiaohumini Grok Image API response received`)
+
+    return this.extractGrokImageUrls(responseData)
+  }
+
+  /**
+   * xiaohumini 渠道：Grok 图片编辑
+   * POST {server}/v1/images/edits (multipart/form-data)
+   * 请求: model, prompt, image (file)
+   * 响应: { data: [{ url }] }
+   */
+  private async callGrokImageEditXiaohumini(
+    dto: CreateImageDto,
+    config: { server: string; key: string },
+  ): Promise<Array<{ mimeType: string; data: string }>> {
+    const model = dto.model || 'grok-3-image'
+    const refImage = dto.referenceImages![0]
+
+    this.logger.log(`📤 Sending edit request to xiaohumini, model: ${model}`)
+
+    const url = `${config.server}/v1/images/edits`
+
+    if (this.isWindows) {
+      // Windows: 使用 curl.exe 发送 multipart/form-data（临时文件放在项目目录避免中文路径问题）
+      const ts = Date.now()
+      const imgFile = path.join(this.safeTmpDir, `grok_edit_${ts}.png`)
+      const promptFile = path.join(this.safeTmpDir, `grok_prompt_${ts}.txt`)
+      fs.writeFileSync(imgFile, Buffer.from(refImage.data, 'base64'))
+      fs.writeFileSync(promptFile, dto.prompt, 'utf-8')
+
+      try {
+        const result = execSync(
+          `curl.exe -sk -X POST "${url}" -H "Authorization: Bearer ${config.key}" -F "model=${model}" -F "prompt=<${promptFile}" -F "image=@${imgFile}" --max-time 120`,
+          { encoding: 'utf-8', timeout: 130000, stdio: ['pipe', 'pipe', 'pipe'] },
+        )
+        this.logger.log(`📥 xiaohumini edit curl response: ${result.substring(0, 500)}`)
+        return this.extractGrokImageUrls(JSON.parse(result))
+      } catch (err: any) {
+        const stderr = err.stderr?.toString() || ''
+        const stdout = err.stdout?.toString() || ''
+        this.logger.error(`❌ curl edit POST failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
+        if (stdout.trim()) {
+          try { return this.extractGrokImageUrls(JSON.parse(stdout)) } catch {}
+        }
+        throw new Error(`curl edit POST failed: ${stderr || err.message}`)
+      } finally {
+        try { fs.unlinkSync(imgFile) } catch {}
+        try { fs.unlinkSync(promptFile) } catch {}
+      }
+    }
+
+    // Linux/Docker: 使用 axios multipart
+    const FormData = require('form-data')
+    const form = new FormData()
+    form.append('model', model)
+    form.append('prompt', dto.prompt)
+    form.append('image', Buffer.from(refImage.data, 'base64'), {
+      filename: 'image.png',
+      contentType: refImage.mimeType || 'image/png',
+    })
+
+    const response = await axios.post(url, form, {
+      headers: {
+        ...form.getHeaders(),
+        'Authorization': `Bearer ${config.key}`,
+      },
+      timeout: 120000,
+    })
+    this.logger.log(`📥 xiaohumini edit response received`)
+    return this.extractGrokImageUrls(response.data)
+  }
+
+  /**
+   * 从 xiaohumini Grok 响应中提取图片 URL 并下载转为 base64
+   * 响应格式: { data: [{ url }] }
+   */
+  private async extractGrokImageUrls(responseData: any): Promise<Array<{ mimeType: string; data: string }>> {
+    const images: Array<{ mimeType: string; data: string }> = []
+
+    try {
+      const dataList = responseData?.data || []
+      for (const item of dataList) {
+        if (item.url) {
+          this.logger.log(`📎 xiaohumini returned image URL: ${item.url}`)
+          const downloaded = await this.downloadImageToBase64(item.url)
+          if (downloaded) {
+            images.push(downloaded)
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.error(`❌ Error extracting xiaohumini images: ${error}`)
+    }
+
+    return images
+  }
+
+  /**
+   * 下载图片 URL 并转为 base64
+   */
+  private async downloadImageToBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+    try {
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 60000,
+      })
+      const buffer = Buffer.from(response.data)
+      const contentType = response.headers['content-type'] || 'image/jpeg'
+      this.logger.log(`📥 Downloaded image: ${(buffer.length / 1024).toFixed(1)} KB, type: ${contentType}`)
+      return {
+        mimeType: contentType,
+        data: buffer.toString('base64'),
+      }
+    } catch (error: any) {
+      this.logger.error(`❌ Failed to download image from ${url}: ${error.message}`)
+      return null
+    }
+  }
+
+  // ===== xiaohumini HTTP 工具方法 =====
+
+  /**
+   * 发送 POST JSON 请求（xiaohumini 渠道）
+   * Windows: 用 curl.exe (Schannel TLS) 绕过 OpenSSL 3.x 不兼容
+   * Linux/Docker: 直接用 axios
+   */
+  private async httpPost(url: string, body: any, apiKey: string): Promise<any> {
+    if (this.isWindows) {
+      return this.curlPost(url, body, apiKey)
+    }
+    const response = await axios.post(url, body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      timeout: 120000,
+    })
+    this.logger.log(`📥 xiaohumini response: ${JSON.stringify(response.data).substring(0, 500)}`)
+    return response.data
+  }
+
+  /**
+   * Windows: 使用 curl.exe (Schannel TLS) 发送 POST 请求
+   */
+  private curlPost(url: string, body: any, apiKey: string): any {
+    const jsonStr = JSON.stringify(body)
+    const tmpFile = path.join(this.safeTmpDir, `grok_img_req_${Date.now()}.json`)
+    fs.writeFileSync(tmpFile, jsonStr, 'utf-8')
+
+    try {
+      const result = execSync(
+        `curl.exe -sk -X POST "${url}" -H "Content-Type: application/json" -H "Accept: application/json" -H "Authorization: Bearer ${apiKey}" -d @"${tmpFile}" --max-time 120`,
+        { encoding: 'utf-8', timeout: 130000, stdio: ['pipe', 'pipe', 'pipe'] },
+      )
+      this.logger.log(`📥 xiaohumini curl response: ${result.substring(0, 500)}`)
+      return JSON.parse(result)
+    } catch (err: any) {
+      const stderr = err.stderr?.toString() || ''
+      const stdout = err.stdout?.toString() || ''
+      this.logger.error(`❌ curl POST failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
+      if (stdout.trim()) {
+        try { return JSON.parse(stdout) } catch {}
+      }
+      throw new Error(`curl POST failed: ${stderr || err.message}`)
+    } finally {
+      try { fs.unlinkSync(tmpFile) } catch {}
+    }
   }
 
   /**

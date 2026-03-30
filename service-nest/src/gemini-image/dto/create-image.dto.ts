@@ -16,6 +16,16 @@ export class CreateImageDto {
   model?: string
 
   /**
+   * API 渠道（Grok/GPT 模型使用）
+   * aifast: 默认渠道，返回 b64_json
+   * xiaohumini: 小胡mini 渠道，返回 url
+   */
+  @IsOptional()
+  @IsString()
+  @IsIn(['aifast', 'xiaohumini'])
+  channel?: string
+
+  /**
    * 提示词
    */
   @IsString()

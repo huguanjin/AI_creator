@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { geminiImageApi, userConfigApi, promptTemplateApi, modelCatalogApi, type GeminiImageResult, type PromptTemplateItem, type ModelCatalogGrouped } from '@/api'
 import axios from 'axios'
 
@@ -13,6 +13,9 @@ const imageForm = ref({
   size: '1024x1024' as string,
   n: 1,
 })
+
+// Grok 图片渠道
+const grokChannel = ref<'aifast' | 'xiaohumini'>('aifast')
 
 // 提示词模板相关
 const promptTemplates = ref<PromptTemplateItem[]>([])
@@ -263,6 +266,10 @@ const loadApiConfig = async () => {
       if (config.geminiImage) apiConfig.value.geminiImage = { ...config.geminiImage }
       if (config.grokImage) apiConfig.value.grokImage = { ...config.grokImage }
       if (config.promptPolish) apiConfig.value.promptPolish = { ...config.promptPolish }
+      // 加载 Grok 图片渠道配置
+      if (config.grokImage?.channel) {
+        grokChannel.value = config.grokImage.channel as 'aifast' | 'xiaohumini'
+      }
     }
   } catch (e) {
     console.error('加载 API 配置失败', e)
@@ -286,6 +293,29 @@ const saveApiConfig = async (type: 'geminiImage' | 'grokImage' | 'promptPolish')
     apiConfigSaving.value[type] = false
   }
 }
+
+// 切换 Grok 图片渠道时自动保存到后端
+watch(() => grokChannel.value, async (newChannel) => {
+  try {
+    await userConfigApi.updateServiceConfig('grokImage', { channel: newChannel })
+  } catch (e) {
+    console.error('保存渠道偏好失败', e)
+  }
+  // 切换渠道时重置 size 和 model 为该渠道默认值
+  if (newChannel === 'xiaohumini') {
+    imageForm.value.size = '960x960'
+    imageForm.value.n = 1
+    // 如果当前模型不属于 xiaohumini 可用列表，则重置
+    if (!['grok-4.2-image', 'grok-3-image'].includes(imageForm.value.model)) {
+      imageForm.value.model = 'grok-4.2-image'
+    }
+  } else {
+    imageForm.value.size = '1024x1024'
+    if (!['grok-4-1-image', 'grok-4-2-image'].includes(imageForm.value.model)) {
+      imageForm.value.model = 'grok-4-2-image'
+    }
+  }
+})
 
 // 处理文件选择
 const handleFileSelect = (event: Event) => {
@@ -339,6 +369,7 @@ const generateImage = async () => {
 
     const payload = {
       ...imageForm.value,
+      channel: isGrokModel.value ? grokChannel.value : undefined,
       referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
       referenceImage: referenceImages.length > 0 ? referenceImages[0] : undefined // 兼容旧 API
     }
@@ -620,7 +651,11 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                   <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
                   <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp</option>
                 </optgroup>
-                <optgroup label="Grok">
+                <optgroup v-if="grokChannel === 'xiaohumini'" label="Grok (xiaohumini)">
+                  <option value="grok-4.2-image">grok-4.2-image</option>
+                  <option value="grok-3-image">grok-3-image</option>
+                </optgroup>
+                <optgroup v-else label="Grok (aifast)">
                   <option value="grok-4-1-image">grok-4-1-image</option>
                   <option value="grok-4-2-image">grok-4-2-image</option>
                 </optgroup>
@@ -714,6 +749,14 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 
           <!-- 参数设置 -->
           <div class="params-grid">
+            <!-- Grok 渠道选择 -->
+            <div class="control-group" v-if="isGrokModel">
+               <label class="group-label">API 渠道</label>
+               <select v-model="grokChannel" class="modern-select">
+                  <option value="aifast">aifast 接口</option>
+                  <option value="xiaohumini">xiaohumini站 接口</option>
+               </select>
+            </div>
             <div class="control-group" v-if="!isGrokModel">
                <label class="group-label">宽高比</label>
                <div class="radio-group-wrapper">
@@ -727,6 +770,13 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                <select v-if="!isGrokModel" v-model="imageForm.imageSize" class="modern-select">
                   <option v-for="sz in availableImageSizes" :key="sz.value" :value="sz.value">{{ sz.label }}</option>
                </select>
+               <select v-else-if="grokChannel === 'xiaohumini'" v-model="imageForm.size" class="modern-select">
+                  <option value="960x960">960×960</option>
+                  <option value="720x1280">720×1280 (竖屏)</option>
+                  <option value="1280x720">1280×720 (横屏)</option>
+                  <option value="1168x784">1168×784</option>
+                  <option value="784x1168">784×1168</option>
+               </select>
                <select v-else v-model="imageForm.size" class="modern-select">
                   <option value="1024x1024">1024×1024</option>
                   <option value="1536x1024">1536×1024</option>
@@ -735,7 +785,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
             </div>
           </div>
           
-          <div class="control-group" v-if="isGrokModel">
+          <div class="control-group" v-if="isGrokModel && grokChannel !== 'xiaohumini'">
              <label class="group-label">生成数量</label>
              <div class="segmented-control">
                 <button v-for="n in 4" :key="n" :class="{ active: imageForm.n === n }" @click="imageForm.n = n">{{ n }}</button>

@@ -448,6 +448,8 @@ export interface CreateGeminiImageParams {
   // Grok/GPT 图片模型参数
   size?: string
   n?: number
+  // Grok 图片渠道
+  channel?: 'aifast' | 'xiaohumini'
 }
 
 export interface GeminiImageResult {
@@ -478,6 +480,7 @@ export const geminiImageApi = {
       if (params.imageSize) formData.append('imageSize', params.imageSize)
       if (params.size) formData.append('size', params.size)
       if (params.n) formData.append('n', String(params.n))
+      if (params.channel) formData.append('channel', params.channel)
       
       for (const file of files) {
         formData.append('reference_images', file)
@@ -505,6 +508,7 @@ export const geminiImageApi = {
       if (params.imageSize) formData.append('imageSize', params.imageSize)
       if (params.size) formData.append('size', params.size)
       if (params.n) formData.append('n', String(params.n))
+      if (params.channel) formData.append('channel', params.channel)
       
       for (const file of files) {
         formData.append('reference_images', file)

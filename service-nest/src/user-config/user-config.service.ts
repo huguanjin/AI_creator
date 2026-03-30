@@ -29,6 +29,7 @@ export interface UserApiConfig {
   grokImage: {
     server: string
     key: string
+    channel: string
   }
   kling: {
     server: string
@@ -120,6 +121,7 @@ export class UserConfigService implements OnApplicationBootstrap {
           grokImage: {
             server: config.grokImage?.server || '',
             key: config.grokImage?.key || '',
+            channel: config.grokImage?.channel || 'aifast',
           },
           kling: {
             server: config.kling?.server || '',
@@ -153,7 +155,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       veo: { server: '', key: '' },
       geminiImage: { server: '', key: '' },
       grok: { server: '', key: '', channel: 'aifast' },
-      grokImage: { server: '', key: '' },
+      grokImage: { server: '', key: '', channel: 'aifast' },
       kling: { server: '', key: '' },
       doubao: { server: '', key: '', channel: 'aifast', xiaohuminiServer: '', xiaohuminiKey: '' },
       vidu: { server: '', key: '', channel: 'aifast' },
@@ -252,6 +254,7 @@ export class UserConfigService implements OnApplicationBootstrap {
       grokImage: {
         server: config.grokImage?.server ?? '',
         key: this.maskKey(config.grokImage?.key ?? ''),
+        channel: config.grokImage?.channel ?? 'aifast',
       },
       kling: {
         server: config.kling?.server ?? '',
@@ -323,6 +326,7 @@ export class UserConfigService implements OnApplicationBootstrap {
     } else if (service === 'grokImage') {
       if (serviceConfig.server !== undefined) config.grokImage.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.grokImage.key = serviceConfig.key
+      if (serviceConfig.channel !== undefined) config.grokImage.channel = serviceConfig.channel
     } else if (service === 'kling') {
       if (serviceConfig.server !== undefined) config.kling.server = serviceConfig.server
       if (serviceConfig.key !== undefined) config.kling.key = serviceConfig.key

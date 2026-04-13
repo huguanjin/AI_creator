@@ -176,6 +176,11 @@ export class ModelCatalogService implements OnApplicationBootstrap {
       { platform: 'doubao', category: '⚡ Seedance 1.0 Pro (xiaohumini)', name: 'doubao-seedance-1-0-pro-fast-251015 (文生/首帧)', value: 'doubao-seedance-1-0-pro-fast-251015', sort: 2, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'doubao', category: '🎨 Seedance 1.0 Lite (xiaohumini)', name: 'doubao-seedance-1-0-lite-t2v-250428 (文生)', value: 'doubao-seedance-1-0-lite-t2v-250428', sort: 1, enabled: true, createdAt: now, updatedAt: now },
       { platform: 'doubao', category: '🎨 Seedance 1.0 Lite (xiaohumini)', name: 'doubao-seedance-1-0-lite-i2v-250428 (首帧/首尾帧/参考图)', value: 'doubao-seedance-1-0-lite-i2v-250428', sort: 2, enabled: true, createdAt: now, updatedAt: now },
+      // === 豆包 Doubao - seedance2 (Seedance 2.0 专用接口) ===
+      { platform: 'doubao', category: '🚀 Seedance 2.0 标准版 (seedance2)', name: 'doubao-seedance-2-0-260128 (纯文生视频)', value: 'doubao-seedance-2-0-260128', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'doubao', category: '🚀 Seedance 2.0 标准版 (seedance2)', name: 'doubao-seedance-2-0-260128-ref (含视频输入)', value: 'doubao-seedance-2-0-260128-ref', sort: 2, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'doubao', category: '⚡ Seedance 2.0 快速版 (seedance2)', name: 'doubao-seedance-2-0-fast-260128 (纯文生视频)', value: 'doubao-seedance-2-0-fast-260128', sort: 1, enabled: true, createdAt: now, updatedAt: now },
+      { platform: 'doubao', category: '⚡ Seedance 2.0 快速版 (seedance2)', name: 'doubao-seedance-2-0-fast-260128-ref (含视频输入)', value: 'doubao-seedance-2-0-fast-260128-ref', sort: 2, enabled: true, createdAt: now, updatedAt: now },
 
       // === 可灵 Kling ===
       { platform: 'kling', category: '🎬 标准版', name: 'Kling-1.6', value: 'Kling-1.6', sort: 1, enabled: true, createdAt: now, updatedAt: now },

@@ -7,6 +7,6 @@ export class QueryDoubaoVideoDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['aifast', 'xiaohumini'])
+  @IsIn(['aifast', 'xiaohumini', 'seedance2'])
   channel?: string
 }

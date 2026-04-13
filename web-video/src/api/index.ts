@@ -231,7 +231,7 @@ export interface CreateDoubaoVideoParams {
   prompt: string
   size?: string
   seconds?: number
-  channel?: 'aifast' | 'xiaohumini'
+  channel?: 'aifast' | 'xiaohumini' | 'seedance2'
   // xiaohumini 渠道参数
   resolution?: string
   camera_fixed?: string
@@ -239,11 +239,41 @@ export interface CreateDoubaoVideoParams {
   seed?: number
   generate_audio?: string
   images?: string[]
+  // seedance2 渠道参数 (Seedance 2.0 系列)
+  image?: string
+  duration?: number
+  seedance2Resolution?: string
+  ratio?: string
+  width?: number
+  height?: number
+  fps?: number
+  n?: number
+  metadata?: string
 }
 
 export const doubaoApi = {
   // 创建视频（支持首帧/尾帧/参考图上传）
   createVideo: (params: CreateDoubaoVideoParams, firstFrame?: File, lastFrame?: File, referenceFiles?: File[]) => {
+    // seedance2 渠道使用 JSON 请求（不需要文件上传）
+    if (params.channel === 'seedance2') {
+      const body: any = {
+        channel: 'seedance2',
+        model: params.model,
+        prompt: params.prompt,
+      }
+      if (params.image) body.image = params.image
+      if (params.duration !== undefined) body.duration = params.duration
+      if (params.seedance2Resolution) body.seedance2Resolution = params.seedance2Resolution
+      if (params.ratio) body.ratio = params.ratio
+      if (params.width !== undefined) body.width = params.width
+      if (params.height !== undefined) body.height = params.height
+      if (params.fps !== undefined) body.fps = params.fps
+      if (params.seed !== undefined && params.seed !== null && params.seed !== -1) body.seed = params.seed
+      if (params.n !== undefined) body.n = params.n
+      if (params.metadata) body.metadata = params.metadata
+      return api.post('/v1/doubao/create', body)
+    }
+
     const formData = new FormData()
     if (params.channel) formData.append('channel', params.channel)
     formData.append('model', params.model)
@@ -288,6 +318,18 @@ export const doubaoApi = {
   // 查询视频状态
   queryVideo: (id: string, channel?: string) =>
     api.get(`/v1/doubao/query?id=${encodeURIComponent(id)}${channel ? `&channel=${encodeURIComponent(channel)}` : ''}`),
+
+  // 代理下载视频 (Seedance 2.0)
+  downloadVideo: (taskId: string) =>
+    api.get(`/v1/doubao/download/${encodeURIComponent(taskId)}`, { responseType: 'blob' }),
+
+  // 上传素材 (Seedance 2.0 图生视频场景)
+  uploadAsset: (data: { type?: string; url?: string; content?: string }) =>
+    api.post('/v1/doubao/asset/upload', data),
+
+  // 查询素材信息 (Seedance 2.0)
+  queryAsset: (id: string) =>
+    api.get(`/v1/doubao/asset/query?id=${encodeURIComponent(id)}`),
 }
 
 // ============ 可灵 (Kling) API ============

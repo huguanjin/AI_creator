@@ -77,18 +77,28 @@ const doubaoForm = ref({
   prompt: '',
   size: '16:9',
   seconds: 5,
-  channel: 'aifast' as 'aifast' | 'xiaohumini',
+  channel: 'aifast' as 'aifast' | 'xiaohumini' | 'seedance2',
   // xiaohumini 渠道参数
   resolution: '720p',
   camera_fixed: 'false',
   watermark: 'false',
   seed: -1 as number,
   generate_audio: 'true',
+  // seedance2 渠道参数
+  image: '',
+  duration: 5 as number,
+  seedance2Resolution: '720p',
+  ratio: 'adaptive',
+  width: undefined as number | undefined,
+  height: undefined as number | undefined,
+  fps: undefined as number | undefined,
+  n: 1 as number,
 })
 
 // 豆包模型自定义输入状态
 const doubaoModelCustom = ref(false)
 const doubaoDurationCustom = ref(false)
+const seedance2DurationCustom = ref(false)
 
 // 豆包首帧/尾帧图片
 const doubaoFirstFrame = ref<File | null>(null)
@@ -100,6 +110,9 @@ const doubaoLastFrameInput = ref<HTMLInputElement | null>(null)
 const doubaoReferenceFiles = ref<File[]>([])
 const doubaoReferenceInput = ref<HTMLInputElement | null>(null)
 const doubaoImageUrls = ref('')
+
+// 豆包素材上传状态 (seedance2 渠道)
+const doubaoAssetUploading = ref(false)
 
 // 可灵 (Kling) 表单
 const klingForm = ref({
@@ -355,16 +368,28 @@ const createVideo = async () => {
             ? doubaoImageUrls.value.split('\n').map(u => u.trim()).filter(Boolean)
             : undefined,
         } : {}),
+        // seedance2 渠道参数
+        ...(doubaoForm.value.channel === 'seedance2' ? {
+          image: doubaoForm.value.image || undefined,
+          duration: doubaoForm.value.duration,
+          seedance2Resolution: doubaoForm.value.seedance2Resolution || undefined,
+          ratio: doubaoForm.value.ratio || undefined,
+          width: doubaoForm.value.width || undefined,
+          height: doubaoForm.value.height || undefined,
+          fps: doubaoForm.value.fps || undefined,
+          seed: doubaoForm.value.seed,
+          n: doubaoForm.value.n,
+        } : {}),
       },
-        doubaoFirstFrame.value || undefined,
-        doubaoLastFrame.value || undefined,
+        doubaoForm.value.channel !== 'seedance2' ? (doubaoFirstFrame.value || undefined) : undefined,
+        doubaoForm.value.channel !== 'seedance2' ? (doubaoLastFrame.value || undefined) : undefined,
         doubaoForm.value.channel === 'xiaohumini' && doubaoReferenceFiles.value.length > 0
           ? doubaoReferenceFiles.value
           : undefined,
       )
 
       task = {
-        id: response.data.id,
+        id: response.data.id || response.data.task_id,
         model: doubaoForm.value.model,
         prompt: doubaoForm.value.prompt,
         status: 'queued',
@@ -493,6 +518,7 @@ const createVideo = async () => {
       doubaoLastFrame.value = null
       doubaoReferenceFiles.value = []
       doubaoImageUrls.value = ''
+      doubaoForm.value.image = ''
     }
     else if (platform.value === 'kling') {
       klingForm.value.prompt = ''
@@ -600,6 +626,40 @@ const handleDoubaoReferenceSelect = (event: Event) => {
 
 const removeDoubaoReferenceFile = (index: number) => {
   doubaoReferenceFiles.value.splice(index, 1)
+}
+
+// seedance2 素材上传处理
+const handleSeedance2AssetUpload = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || !input.files[0]) return
+  const file = input.files[0]
+  input.value = ''
+
+  doubaoAssetUploading.value = true
+  try {
+    // 将文件转为 Base64 上传到素材管理接口
+    const reader = new FileReader()
+    const base64 = await new Promise<string>((resolve, reject) => {
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+    const result = await doubaoApi.uploadAsset({
+      type: 'image',
+      content: base64,
+    })
+
+    const assetUrl = result.data?.url || result.data?.id || ''
+    if (assetUrl) {
+      doubaoForm.value.image = assetUrl
+    }
+  } catch (e: any) {
+    console.error('素材上传失败', e)
+    alert(`素材上传失败: ${e?.response?.data?.message || e.message || '未知错误'}`)
+  } finally {
+    doubaoAssetUploading.value = false
+  }
 }
 
 // 可灵参考图处理
@@ -1244,6 +1304,7 @@ onMounted(async () => {
             <select v-model="doubaoForm.channel" class="form-select">
               <option value="aifast">aifast 接口</option>
               <option value="xiaohumini">xiaohumini站 接口</option>
+              <option value="seedance2">Seedance 2.0 专用接口</option>
             </select>
           </div>
 
@@ -1266,6 +1327,16 @@ onMounted(async () => {
                       <option value="doubao-seedance-1-5-pro_480p">doubao-seedance-1-5-pro_480p</option>
                       <option value="doubao-seedance-1-5-pro_720p">doubao-seedance-1-5-pro_720p</option>
                       <option value="doubao-seedance-1-5-pro_1080p">doubao-seedance-1-5-pro_1080p</option>
+                    </optgroup>
+                  </template>
+                  <template v-else-if="doubaoForm.channel === 'seedance2'">
+                    <optgroup label="🎬 Seedance 2.0 标准版">
+                      <option value="doubao-seedance-2-0-260128">doubao-seedance-2-0-260128 (纯文生视频)</option>
+                      <option value="doubao-seedance-2-0-260128-ref">doubao-seedance-2-0-260128-ref (含图片输入)</option>
+                    </optgroup>
+                    <optgroup label="⚡ Seedance 2.0 快速版">
+                      <option value="doubao-seedance-2-0-fast-260128">doubao-seedance-2-0-fast-260128 (纯文生视频)</option>
+                      <option value="doubao-seedance-2-0-fast-260128-ref">doubao-seedance-2-0-fast-260128-ref (含图片输入)</option>
                     </optgroup>
                   </template>
                   <template v-else>
@@ -1320,7 +1391,7 @@ onMounted(async () => {
             </select>
           </div>
 
-          <div class="form-group">
+          <div v-if="doubaoForm.channel !== 'seedance2'" class="form-group">
             <label class="form-label">画面比例</label>
             <select v-model="doubaoForm.size" class="form-select">
               <option value="16:9">横屏 (16:9)</option>
@@ -1336,7 +1407,7 @@ onMounted(async () => {
             </select>
           </div>
 
-          <div class="form-group">
+          <div v-if="doubaoForm.channel !== 'seedance2'" class="form-group">
             <label class="form-label">时长 (秒)</label>
             <div class="input-with-toggle">
               <select
@@ -1402,8 +1473,150 @@ onMounted(async () => {
             </div>
           </template>
 
-          <!-- 首帧图上传 -->
-          <div class="form-group">
+          <!-- seedance2 渠道：专用参数 -->
+          <template v-if="doubaoForm.channel === 'seedance2'">
+            <div class="form-group">
+              <label class="form-label">视频时长 (秒)</label>
+              <div class="input-with-toggle">
+                <select
+                  v-if="!seedance2DurationCustom"
+                  v-model.number="doubaoForm.duration"
+                  class="form-select"
+                >
+                  <option :value="-1">智能选择</option>
+                  <option :value="4">4 秒</option>
+                  <option :value="5">5 秒</option>
+                  <option :value="6">6 秒</option>
+                  <option :value="7">7 秒</option>
+                  <option :value="8">8 秒</option>
+                  <option :value="9">9 秒</option>
+                  <option :value="10">10 秒</option>
+                  <option :value="11">11 秒</option>
+                  <option :value="12">12 秒</option>
+                  <option :value="13">13 秒</option>
+                  <option :value="14">14 秒</option>
+                  <option :value="15">15 秒</option>
+                </select>
+                <input
+                  v-else
+                  v-model.number="doubaoForm.duration"
+                  type="number"
+                  class="form-input"
+                  min="4"
+                  max="15"
+                  placeholder="输入秒数 (4-15)"
+                >
+                <button
+                  type="button"
+                  class="toggle-btn"
+                  :title="seedance2DurationCustom ? '切换为下拉选择' : '切换为自定义输入'"
+                  @click="seedance2DurationCustom = !seedance2DurationCustom"
+                >
+                  {{ seedance2DurationCustom ? '📋' : '✏️' }}
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">输出分辨率</label>
+              <select v-model="doubaoForm.seedance2Resolution" class="form-select">
+                <option value="720p">720p（默认）</option>
+                <option value="480p">480p</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">画幅比例</label>
+              <select v-model="doubaoForm.ratio" class="form-select">
+                <option value="adaptive">自适应（默认）</option>
+                <option value="16:9">16:9 横屏</option>
+                <option value="9:16">9:16 竖屏</option>
+                <option value="4:3">4:3</option>
+                <option value="3:4">3:4</option>
+                <option value="1:1">1:1 正方形</option>
+                <option value="21:9">21:9 超宽</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">视频宽度 (像素，可选，覆盖比例设置)</label>
+              <input
+                v-model.number="doubaoForm.width"
+                type="number"
+                class="form-input"
+                placeholder="例如: 1920"
+              >
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">视频高度 (像素，可选，覆盖比例设置)</label>
+              <input
+                v-model.number="doubaoForm.height"
+                type="number"
+                class="form-input"
+                placeholder="例如: 1080"
+              >
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">帧率 (可选)</label>
+              <input
+                v-model.number="doubaoForm.fps"
+                type="number"
+                class="form-input"
+                placeholder="例如: 24"
+              >
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">生成数量</label>
+              <select v-model.number="doubaoForm.n" class="form-select">
+                <option :value="1">1</option>
+                <option :value="2">2</option>
+                <option :value="4">4</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">参考图片 (可选，URL 或 Base64，图生视频模型使用)</label>
+              <div class="reference-upload" style="margin-bottom: 8px">
+                <input
+                  ref="seedance2AssetInput"
+                  type="file"
+                  accept="image/*"
+                  style="display: none"
+                  @change="handleSeedance2AssetUpload"
+                >
+                <button
+                  type="button"
+                  class="btn btn-secondary upload-btn"
+                  :disabled="doubaoAssetUploading"
+                  @click="($refs.seedance2AssetInput as HTMLInputElement)?.click()"
+                >
+                  {{ doubaoAssetUploading ? '⏳ 上传中...' : '📤 上传图片获取URL' }}
+                </button>
+              </div>
+              <input
+                v-model="doubaoForm.image"
+                type="text"
+                class="form-input"
+                placeholder="图片 URL 或 Base64 编码（也可点击上方按钮上传）"
+              >
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">随机种子 (可选，-1 为随机)</label>
+              <input
+                v-model.number="doubaoForm.seed"
+                type="number"
+                class="form-input"
+                placeholder="-1 表示随机"
+              >
+            </div>
+          </template>
+
+          <!-- 首帧图上传 (非 seedance2) -->
+          <div v-if="doubaoForm.channel !== 'seedance2'" class="form-group">
             <label class="form-label">首帧图 (可选)</label>
             <div class="reference-upload">
               <input
@@ -1428,7 +1641,7 @@ onMounted(async () => {
           </div>
 
           <!-- 尾帧图上传 -->
-          <div class="form-group">
+          <div v-if="doubaoForm.channel !== 'seedance2'" class="form-group">
             <label class="form-label">尾帧图 (可选)</label>
             <div class="reference-upload">
               <input

@@ -649,7 +649,10 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                 <optgroup label="Gemini">
                   <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
                   <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                  <option value="gemini-2.0-flash-exp-image-generation">gemini-2.0-flash-exp</option>
+                  
+                  <option value="gemini-2.5-flash-image-vip">gemini-2.5-flash-image-vip</option>
+                  <option value="gemini-3-pro-image-preview-vip">gemini-3-pro-image-preview-vip</option>
+                  <option value="gemini-3.1-flash-image-preview-vip">gemini-3.1-flash-image-preview-vip</option>
                 </optgroup>
                 <optgroup v-if="grokChannel === 'xiaohumini'" label="Grok (xiaohumini)">
                   <option value="grok-4.2-image">grok-4.2-image</option>

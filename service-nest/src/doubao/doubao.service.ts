@@ -48,7 +48,7 @@ export class DoubaoService {
   }
 
   /**
-   * 创建豆包视频任务（支持 aifast 和 xiaohumini 渠道）
+   * 创建豆包视频任务（支持 aifast、xiaohumini 和 seedance2 渠道）
    */
   async createVideo(
     dto: CreateDoubaoVideoDto,
@@ -64,6 +64,10 @@ export class DoubaoService {
     this.logger.log(`📤 Creating Doubao video [${channel}] with model: ${dto.model}`)
     this.logger.log(`📝 Prompt: ${dto.prompt}`)
     this.logger.log(`🔗 Server: ${config.server}`)
+
+    if (channel === 'seedance2') {
+      return this.createVideoSeedance2(dto, config)
+    }
 
     if (channel === 'xiaohumini') {
       return this.createVideoXiaohumini(dto, config, firstFrameFile, lastFrameFile, referenceFiles)
@@ -253,7 +257,7 @@ export class DoubaoService {
   }
 
   /**
-   * 查询豆包视频任务状态（支持 aifast 和 xiaohumini 渠道）
+   * 查询豆包视频任务状态（支持 aifast、xiaohumini 和 seedance2 渠道）
    */
   async queryVideo(taskId: string, userId?: string, channel?: string): Promise<any> {
     const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
@@ -261,6 +265,10 @@ export class DoubaoService {
     const config = this.getChannelConfig(fullConfig, ch)
 
     this.logger.log(`📤 Querying Doubao task [${ch}]: ${taskId}`)
+
+    if (ch === 'seedance2') {
+      return this.queryVideoSeedance2(taskId, config)
+    }
 
     if (ch === 'xiaohumini') {
       return this.queryVideoXiaohumini(taskId, config)
@@ -328,5 +336,183 @@ export class DoubaoService {
     }
 
     return data
+  }
+
+  /**
+   * seedance2 渠道创建视频 (Seedance 2.0 系列)
+   * POST {server}/v1/videos (JSON, OpenAI 兼容格式)
+   * 复用 aifast 渠道的 server/key
+   */
+  private async createVideoSeedance2(
+    dto: CreateDoubaoVideoDto,
+    config: { server: string; key: string },
+  ): Promise<any> {
+    const body: any = {
+      model: dto.model,
+      prompt: dto.prompt,
+    }
+
+    // 可选参数
+    if (dto.image) body.image = dto.image
+    if (dto.duration !== undefined) body.duration = dto.duration
+    if (dto.seedance2Resolution) body.resolution = dto.seedance2Resolution
+    if (dto.ratio) body.ratio = dto.ratio
+    if (dto.width !== undefined) body.width = dto.width
+    if (dto.height !== undefined) body.height = dto.height
+    if (dto.fps !== undefined) body.fps = dto.fps
+    if (dto.seed !== undefined && dto.seed !== null && dto.seed !== -1) body.seed = dto.seed
+    if (dto.n !== undefined) body.n = dto.n
+
+    // metadata 扩展参数 (JSON 字符串 → 对象)
+    if (dto.metadata) {
+      try {
+        body.metadata = typeof dto.metadata === 'string' ? JSON.parse(dto.metadata) : dto.metadata
+      } catch {
+        this.logger.warn(`⚠️ Failed to parse metadata JSON, ignoring: ${dto.metadata}`)
+      }
+    }
+
+    this.logger.log(`📤 Sending seedance2 create request to: ${config.server}/v1/videos`)
+    this.logger.log(`📦 Request body: ${JSON.stringify(body).slice(0, 500)}`)
+
+    const response = await axios.post(
+      `${config.server}/v1/videos`,
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 120000,
+      },
+    )
+
+    return response.data
+  }
+
+  /**
+   * seedance2 渠道查询视频
+   * GET {server}/v1/videos/{task_id}
+   * 标准化响应：统一状态映射，提取 video_url
+   */
+  private async queryVideoSeedance2(
+    taskId: string,
+    config: { server: string; key: string },
+  ): Promise<any> {
+    const response = await axios.get(
+      `${config.server}/v1/videos/${encodeURIComponent(taskId)}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 30000,
+      },
+    )
+
+    const data = response.data
+
+    // 标准化状态
+    let status = data.status
+    if (status === 'succeeded') status = 'completed'
+    else if (status === 'in_progress' || status === 'queued') status = 'processing'
+
+    // 解析进度百分比 "45%" → 45
+    let progress: number | undefined
+    if (data.progress) {
+      const match = String(data.progress).match(/(\d+)/)
+      if (match) progress = parseInt(match[1], 10)
+    }
+
+    // 提取视频 URL
+    const videoUrl = data.metadata?.video_url || data.metadata?.url
+
+    return {
+      id: data.id || data.task_id,
+      status,
+      progress,
+      video_url: videoUrl,
+      model: data.model,
+      seconds: data.seconds,
+      size: data.size,
+      created_at: data.created_at,
+      completed_at: data.completed_at,
+      error: data.error,
+      metadata: data.metadata,
+    }
+  }
+
+  /**
+   * 代理下载视频文件 (Seedance 2.0)
+   * GET {server}/v1/videos/{task_id}/content
+   * 返回 axios 响应流，由 Controller 将其 pipe 到客户端响应
+   */
+  async downloadVideo(taskId: string, userId?: string): Promise<any> {
+    const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
+    const config = this.getChannelConfig(fullConfig, 'seedance2')
+
+    this.logger.log(`📥 Downloading video: ${taskId}`)
+
+    const response = await axios.get(
+      `${config.server}/v1/videos/${encodeURIComponent(taskId)}/content`,
+      {
+        headers: {
+          'Authorization': `Bearer ${config.key}`,
+        },
+        responseType: 'stream',
+        timeout: 300000,
+      },
+    )
+
+    return response
+  }
+
+  /**
+   * 上传素材 (Seedance 2.0 图生视频场景)
+   * POST {server}/api/asset/createMedia
+   * 透传请求体至上游
+   */
+  async uploadAsset(body: any, userId?: string): Promise<any> {
+    const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
+    const config = this.getChannelConfig(fullConfig, 'seedance2')
+
+    this.logger.log(`📤 Uploading asset to: ${config.server}/api/asset/createMedia`)
+
+    const response = await axios.post(
+      `${config.server}/api/asset/createMedia`,
+      body,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 120000,
+      },
+    )
+
+    return response.data
+  }
+
+  /**
+   * 查询素材信息 (Seedance 2.0)
+   * GET {server}/api/asset/get?id={asset_id}
+   */
+  async queryAsset(assetId: string, userId?: string): Promise<any> {
+    const fullConfig = await this.getUserDoubaoConfig(userId || 'unknown')
+    const config = this.getChannelConfig(fullConfig, 'seedance2')
+
+    this.logger.log(`🔍 Querying asset: ${assetId}`)
+
+    const response = await axios.get(
+      `${config.server}/api/asset/get`,
+      {
+        params: { id: assetId },
+        headers: {
+          'Authorization': `Bearer ${config.key}`,
+        },
+        timeout: 30000,
+      },
+    )
+
+    return response.data
   }
 }

@@ -6,6 +6,7 @@
         <nav class="nav">
           <router-link to="/" class="nav-link">🎬 视频生成</router-link>
           <router-link to="/image" class="nav-link">🎨 图片创作</router-link>
+          <router-link to="/stress-test" class="nav-link">⚡ 压力测试</router-link>
 
           <!-- 任务中心下拉 -->
           <div class="nav-dropdown">

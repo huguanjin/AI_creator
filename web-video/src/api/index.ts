@@ -1071,4 +1071,77 @@ export const promptPolishApi = {
   getStreamUrl: () => `${API_BASE}/v1/prompt-polish/stream`,
 }
 
+// ============ Stress Test API ============
+
+export interface StressTestConfig {
+  model: string
+  channel?: string
+  rpm: number
+  totalRequests?: number
+  prompts: string[]
+  aspectRatio?: string
+  imageSize?: string
+  size?: string
+  n?: number
+}
+
+export interface StressTestStats {
+  totalSent: number
+  totalSuccess: number
+  totalFailed: number
+  inFlight: number
+  avgLatency: number
+  p50: number
+  p95: number
+  p99: number
+  actualRps: number
+  successRate: number
+  elapsedMs: number
+  errors: Array<{ time: number; message: string }>
+  startTime: number
+  endTime?: number
+}
+
+export interface StressTestStatus {
+  sessionId: string
+  status: 'running' | 'completed' | 'stopped' | 'error'
+  config: StressTestConfig
+  stats: StressTestStats
+}
+
+export interface StressTestHistoryItem {
+  sessionId: string
+  config: StressTestConfig
+  status: string
+  totalSent: number
+  totalSuccess: number
+  totalFailed: number
+  successRate: number
+  elapsedMs: number
+  createdAt: number
+}
+
+export const stressTestApi = {
+  start: (config: StressTestConfig) =>
+    api.post<{ status: string; data: { sessionId: string; status: string } }>(
+      '/v1/stress-test/start',
+      config,
+    ),
+
+  stop: (sessionId: string) =>
+    api.post<{ status: string; data: { status: string } }>(
+      `/v1/stress-test/stop/${encodeURIComponent(sessionId)}`,
+    ),
+
+  getStatus: (sessionId: string) =>
+    api.get<{ status: string; data: StressTestStatus }>(
+      `/v1/stress-test/status/${encodeURIComponent(sessionId)}`,
+    ),
+
+  getHistory: () =>
+    api.get<{ status: string; data: StressTestHistoryItem[] }>(
+      '/v1/stress-test/history',
+    ),
+}
+
 export default api

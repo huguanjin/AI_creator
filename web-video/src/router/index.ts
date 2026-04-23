@@ -64,6 +64,11 @@ const router = createRouter({
       component: () => import('@/views/ConfigView.vue')
     },
     {
+      path: '/stress-test',
+      name: 'stress-test',
+      component: () => import('@/views/StressTestView.vue')
+    },
+    {
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),

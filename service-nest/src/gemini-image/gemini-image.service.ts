@@ -134,6 +134,36 @@ export class GeminiImageService {
   }
 
   /**
+   * 判断是否为 GPT 图片模型（gpt-image-* 系列）
+   */
+  private isGptImageModel(model: string): boolean {
+    return model.startsWith('gpt-image')
+  }
+
+  /**
+   * 压测专用：调用上游 API 生成图片，不保存到磁盘/数据库
+   * 返回 { success, latencyMs, error? }
+   */
+  async stressTestGenerate(dto: CreateImageDto, userId: string): Promise<{ success: boolean; latencyMs: number; error?: string }> {
+    const model = dto.model || 'gemini-3-pro-image-preview'
+    const start = Date.now()
+    try {
+      if (this.isGrokImageModel(model)) {
+        await this.callGrokImageApi(dto, userId)
+      } else {
+        await this.callGeminiImageApi(dto, userId)
+      }
+      return { success: true, latencyMs: Date.now() - start }
+    } catch (error: any) {
+      return {
+        success: false,
+        latencyMs: Date.now() - start,
+        error: error.response?.data?.error?.message || error.message,
+      }
+    }
+  }
+
+  /**
    * 创建图片生成任务
    */
   async createImage(dto: CreateImageDto, userId: string): Promise<{ id: string; status: string }> {
@@ -281,6 +311,12 @@ export class GeminiImageService {
     const size = dto.size || '1024x1024'
     const n = dto.n || 1
 
+    // GPT 模型带参考图时走图片编辑接口 /v1/images/edits
+    if (this.isGptImageModel(model) && dto.referenceImages && dto.referenceImages.length > 0) {
+      const grokConfig = await this.getUserGrokImageConfig(userId)
+      return this.callGptImageEditAifast(dto, grokConfig)
+    }
+
     const payload: any = {
       model,
       size,
@@ -289,7 +325,7 @@ export class GeminiImageService {
       response_format: 'b64_json',
     }
 
-    // 如果有参考图片（垫图），转为 base64 URL 数组
+    // 如果有参考图片（垫图），转为 base64 URL 数组（Grok 模型）
     if (dto.referenceImages && dto.referenceImages.length > 0) {
       payload.image = dto.referenceImages.map(
         img => `data:${img.mimeType};base64,${img.data}`,
@@ -327,6 +363,103 @@ export class GeminiImageService {
     }
 
     return firstBatch
+  }
+
+  /**
+   * GPT 图片编辑：使用 /v1/images/edits (multipart/form-data)
+   * 文档：https://platform.openai.com/docs/api-reference/images/createEdit
+   * 请求：image(file), prompt, model, n, size, response_format
+   * 响应：{ data: [{ b64_json?, url? }] }
+   */
+  private async callGptImageEditAifast(
+    dto: CreateImageDto,
+    config: { server: string; key: string },
+  ): Promise<Array<{ mimeType: string; data: string }>> {
+    const model = dto.model || 'gpt-image-2'
+    const size = dto.size || '1024x1024'
+    const n = dto.n || 1
+    const refImage = dto.referenceImages![0]
+
+    this.logger.log(`📤 Sending GPT image edit request, model: ${model}, size: ${size}, n: ${n}`)
+
+    const url = `${config.server}/v1/images/edits`
+
+    if (this.isWindows) {
+      // Windows: 使用 curl.exe 发送 multipart/form-data（临时文件放项目目录避免中文路径问题）
+      const ts = Date.now()
+      const imgFile = path.join(this.safeTmpDir, `gpt_edit_${ts}.png`)
+      const promptFile = path.join(this.safeTmpDir, `gpt_prompt_${ts}.txt`)
+      fs.writeFileSync(imgFile, Buffer.from(refImage.data, 'base64'))
+      fs.writeFileSync(promptFile, dto.prompt, 'utf-8')
+
+      try {
+        const result = execSync(
+          `curl.exe -sk -X POST "${url}" -H "Authorization: Bearer ${config.key}" -F "model=${model}" -F "n=${n}" -F "size=${size}" -F "prompt=<${promptFile}" -F "image=@${imgFile}" --max-time 180`,
+          { encoding: 'utf-8', timeout: 190000, stdio: ['pipe', 'pipe', 'pipe'] },
+        )
+        this.logger.log(`📥 GPT image edit curl response: ${result.substring(0, 500)}`)
+        const parsed = JSON.parse(result)
+        const images = this.extractGrokImages(parsed)
+        // 若 URL 模式则下载转 base64
+        return await this.resolveGrokImageResults(parsed, images)
+      } catch (err: any) {
+        const stderr = err.stderr?.toString() || ''
+        const stdout = err.stdout?.toString() || ''
+        this.logger.error(`❌ curl GPT edit POST failed. stderr: ${stderr}, stdout: ${stdout.substring(0, 300)}`)
+        if (stdout.trim()) {
+          try {
+            const parsed = JSON.parse(stdout)
+            return await this.resolveGrokImageResults(parsed, this.extractGrokImages(parsed))
+          } catch {}
+        }
+        throw new Error(`curl GPT edit POST failed: ${stderr || err.message}`)
+      } finally {
+        try { fs.unlinkSync(imgFile) } catch {}
+        try { fs.unlinkSync(promptFile) } catch {}
+      }
+    }
+
+    // Linux/Docker: 使用 axios + form-data
+    const FormData = require('form-data')
+    const form = new FormData()
+    form.append('model', model)
+    form.append('prompt', dto.prompt)
+    form.append('n', String(n))
+    form.append('size', size)
+    form.append('image', Buffer.from(refImage.data, 'base64'), {
+      filename: 'image.png',
+      contentType: refImage.mimeType || 'image/png',
+    })
+
+    const response = await axios.post(url, form, {
+      headers: {
+        ...form.getHeaders(),
+        'Authorization': `Bearer ${config.key}`,
+      },
+      timeout: 180000,
+    })
+    this.logger.log(`📥 GPT image edit response received`)
+    return await this.resolveGrokImageResults(response.data, this.extractGrokImages(response.data))
+  }
+
+  /**
+   * 解析 Grok/GPT 图片响应：b64_json 直接使用，url 则下载转 base64
+   */
+  private async resolveGrokImageResults(
+    responseData: any,
+    extractedImages: Array<{ mimeType: string; data: string }>,
+  ): Promise<Array<{ mimeType: string; data: string }>> {
+    const result: Array<{ mimeType: string; data: string }> = [...extractedImages]
+    try {
+      const dataList = responseData?.data || []
+      for (const item of dataList) {
+        if (!item.b64_json && item.url) {
+          const downloaded = await this.downloadImageToBase64(item.url)
+          if (downloaded) result.push(downloaded)
+        }
+      }
+    } catch {}
+    return result
   }
 
   /**

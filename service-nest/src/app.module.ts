@@ -20,6 +20,7 @@ import { AnnouncementModule } from './announcement/announcement.module'
 import { ModelCatalogModule } from './model-catalog/model-catalog.module'
 import { PromptTemplateModule } from './prompt-template/prompt-template.module'
 import { PromptPolishModule } from './prompt-polish/prompt-polish.module'
+import { StressTestModule } from './stress-test/stress-test.module'
 
 @Module({
   imports: [
@@ -68,6 +69,8 @@ import { PromptPolishModule } from './prompt-polish/prompt-polish.module'
     PromptTemplateModule,
     // 提示词润色模块
     PromptPolishModule,
+    // RPM 压力测试模块
+    StressTestModule,
   ],
 })
 export class AppModule {}

@@ -192,6 +192,11 @@ const isGrokModel = computed(() => {
   return (m.startsWith('grok-') && m.includes('image')) || m.startsWith('gpt-image')
 })
 
+// 判断当前模型是否为 GPT 图片模型
+const isGptModel = computed(() => {
+  return imageForm.value.model.startsWith('gpt-image')
+})
+
 // 判断当前模型是否为 Gemini 3.1 Flash Image
 const isGemini31Flash = computed(() => {
   return imageForm.value.model === 'gemini-3.1-flash-image-preview'
@@ -311,7 +316,8 @@ watch(() => grokChannel.value, async (newChannel) => {
     }
   } else {
     imageForm.value.size = '1024x1024'
-    if (!['grok-4-1-image', 'grok-4-2-image'].includes(imageForm.value.model)) {
+    // 切换到 aifast 时，若当前是 GPT 模型则不重置（GPT 也走 aifast 渠道）
+    if (!['grok-4-1-image', 'grok-4-2-image'].includes(imageForm.value.model) && !imageForm.value.model.startsWith('gpt-image')) {
       imageForm.value.model = 'grok-4-2-image'
     }
   }
@@ -664,6 +670,8 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                 </optgroup>
                 <optgroup label="GPT">
                   <option value="gpt-image-1.5">gpt-image-1.5</option>
+                  <option value="gpt-image-2">gpt-image-2</option>
+                  <option value="gpt-image-2-all">gpt-image-2-all</option>
                 </optgroup>
               </select>
               <input v-else v-model="imageForm.model" type="text" class="modern-input" placeholder="输入自定义模型名称" />
@@ -752,8 +760,8 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
 
           <!-- 参数设置 -->
           <div class="params-grid">
-            <!-- Grok 渠道选择 -->
-            <div class="control-group" v-if="isGrokModel">
+            <!-- Grok 渠道选择（GPT 模型固定走 aifast，不显示此选项） -->
+            <div class="control-group" v-if="isGrokModel && !isGptModel">
                <label class="group-label">API 渠道</label>
                <select v-model="grokChannel" class="modern-select">
                   <option value="aifast">aifast 接口</option>
@@ -773,6 +781,12 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
                <select v-if="!isGrokModel" v-model="imageForm.imageSize" class="modern-select">
                   <option v-for="sz in availableImageSizes" :key="sz.value" :value="sz.value">{{ sz.label }}</option>
                </select>
+               <select v-else-if="isGptModel" v-model="imageForm.size" class="modern-select">
+                  <option value="auto">auto (自动)</option>
+                  <option value="1024x1024">1024×1024 (正方形)</option>
+                  <option value="1536x1024">1536×1024 (横版)</option>
+                  <option value="1024x1536">1024×1536 (竖版)</option>
+               </select>
                <select v-else-if="grokChannel === 'xiaohumini'" v-model="imageForm.size" class="modern-select">
                   <option value="960x960">960×960</option>
                   <option value="720x1280">720×1280 (竖屏)</option>
@@ -788,7 +802,7 @@ const getImageSrc = (image: { mimeType: string; url?: string; data?: string }) =
             </div>
           </div>
           
-          <div class="control-group" v-if="isGrokModel && grokChannel !== 'xiaohumini'">
+          <div class="control-group" v-if="isGrokModel && (isGptModel || grokChannel !== 'xiaohumini')">
              <label class="group-label">生成数量</label>
              <div class="segmented-control">
                 <button v-for="n in 4" :key="n" :class="{ active: imageForm.n === n }" @click="imageForm.n = n">{{ n }}</button>
